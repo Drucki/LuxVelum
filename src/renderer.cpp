@@ -300,7 +300,7 @@ void DescribeLightPool(const LocalLightInputs& lights, uint32_t uploaded, char* 
     size_t written = 0;
     text[0] = '\0';
     if (lights.candidateCount > uploaded)
-        written += static_cast<size_t>(std::snprintf(text, size, ", %u in reach", lights.candidateCount));
+        written += static_cast<size_t>(std::snprintf(text, size, ", %u in view", lights.candidateCount));
     if ((lights.skippedDisabled || lights.skippedNonPoint) && written < size)
         std::snprintf(text + written, size - written, ", %u disabled and %u non-point nodes skipped",
                       lights.skippedDisabled, lights.skippedNonPoint);

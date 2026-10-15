@@ -103,17 +103,22 @@ void CheckLocalLightInputs()
     distant.position[2] = 900.0f;
     LocalPointLight beside = PointLightFixture(300.0f);
     beside.position[2] = 0.5f;
+    LocalPointLight crossing = PointLightFixture(20.0f);
+    crossing.position[2] = 10.0f;
     LocalLightInputs inView;
     LocalLightInputs unprojected;
     const bool distantSelected = engine::SelectLocalPointLightInView(inView, distant, ahead, {});
     const bool besideSelected = engine::SelectLocalPointLightInView(inView, beside, ahead, {});
+    const bool crossingSelected = engine::SelectLocalPointLightInView(inView, crossing, ahead, {});
     const bool besideWithoutView = engine::SelectLocalPointLightInView(unprojected, beside, LocalLightCamera{}, {});
-    Check(distantSelected && inView.pointLightCount == 1 && inView.candidateCount == 1 &&
-              LocalNear(inView.pointLights[0].uploadedColor[0], 1.0f) &&
-              LocalNear(inView.pointLights[0].cutoff, std::sqrt(255.0f)) && !besideSelected && besideWithoutView &&
+    Check(distantSelected && !besideSelected && crossingSelected && inView.pointLightCount == 2 &&
+              inView.candidateCount == 2 && inView.pointLights[1].position[2] == 900.0f &&
+              LocalNear(inView.pointLights[1].uploadedColor[0], 1.0f) &&
+              LocalNear(inView.pointLights[1].cutoff, std::sqrt(255.0f)) && besideWithoutView &&
               unprojected.pointLightCount == 1,
-          "a point light is captured at full strength at any distance while its sphere meets the view, a sphere "
-          "wholly outside the view is not a candidate, and a camera without a projection sees every light");
+          "a point light is captured at full strength at any distance while its sphere meets the view, even with "
+          "its centre outside, a sphere wholly outside the view is not a candidate, and a camera without a "
+          "projection sees every light");
 
     LocalLightInputs crowded;
     for (int i = 0; i < 30; ++i)
@@ -126,6 +131,21 @@ void CheckLocalLightInputs()
     engine::SelectLocalPointLightInView(crowded, distant, ahead, {});
     Check(crowded.candidateCount == 1 && crowded.pointLightCount == 1 && crowded.pointLights[0].position[2] == 900.0f,
           "thirty brighter lights wholly behind the camera cannot crowd a far light ahead out of the candidate pool");
+
+    LocalLightInputs flat;
+    LocalPointLight farFlat = PointLightFixture(0.0f);
+    farFlat.position[2] = 1500.0f;
+    farFlat.attenuation[0] = 0.0f;
+    farFlat.attenuation[2] = 0.0f;
+    LocalPointLight nearFlat = farFlat;
+    nearFlat.position[0] = 10.0f;
+    nearFlat.position[2] = 20.0f;
+    engine::SelectLocalPointLightInView(flat, farFlat, ahead, {});
+    engine::SelectLocalPointLightInView(flat, nearFlat, ahead, {});
+    Check(flat.pointLightCount == 2 && flat.pointLights[0].position[2] == 20.0f &&
+              flat.pointLights[0].cutoff == kMaxLocalPointLightRadius,
+          "lights of equal priority rank by camera distance, so a constant-attenuation light 1500 yd ahead ranks "
+          "behind one 20 yd ahead");
 
     bool clearedBoth = true;
     for (bool withPointLights : {true, false})

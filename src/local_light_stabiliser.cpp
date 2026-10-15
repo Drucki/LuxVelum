@@ -153,7 +153,7 @@ void LocalLightStabiliser::MatchCandidates(const LocalLightCamera& camera, const
     for (uint32_t i = 0; i < m_count; ++i)
     {
         Entry& entry = m_entries[i];
-        if (!entry.present && !PointLightMeetsView(entry.light, camera))
+        if (!entry.present && !PointLightMeetsView(entry.light, camera, kLocalLightViewExitYards))
             entry.outOfView = true;
     }
 }

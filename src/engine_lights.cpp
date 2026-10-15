@@ -105,6 +105,10 @@ bool Precedes(const LocalPointLight& a, const LocalPointLight& b, const float ca
     const double bPriority = engine::LocalLightPriority(b, cameraPosition);
     if (aPriority != bPriority)
         return aPriority > bPriority;
+    const double aDistance = SquaredDistance(a.position, cameraPosition);
+    const double bDistance = SquaredDistance(b.position, cameraPosition);
+    if (aDistance != bDistance)
+        return aDistance < bDistance;
     for (int i = 0; i < 3; ++i)
         if (a.position[i] != b.position[i])
             return a.position[i] < b.position[i];
@@ -356,9 +360,33 @@ LocalLightCapture CapturePointLightTableGuarded(uintptr_t sceneSlot, const Local
         return LocalLightCapture::ReadFault;
     }
 }
+
+bool CandidateInputsValid(const LocalLightInputs& out, const LocalPointLight& light, const float cameraPosition[3],
+                          const PointLightUpload& upload)
+{
+    return out.pointLightCount <= kMaxLocalPointLights && out.candidateCount <= kLocalLightCandidatePool &&
+           ValidVector(cameraPosition, -kMaxWorldCoordinate, kMaxWorldCoordinate) &&
+           ValidVector(light.position, -kMaxWorldCoordinate, kMaxWorldCoordinate) &&
+           ValidVector(light.color, 0.0f, kMaxLightComponent) && std::isfinite(upload.intensity) &&
+           upload.intensity >= 0.0f;
 }
 
-bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& camera)
+bool BoundCandidate(const LocalPointLight& light, const PointLightUpload& upload, LocalPointLight& candidate)
+{
+    candidate = light;
+    engine::UploadedPointLightColor(candidate.color, upload, candidate.uploadedColor);
+    candidate.cutoff = engine::PointLightCutoff(candidate.uploadedColor, candidate.attenuation);
+    return candidate.cutoff > 0.0f;
+}
+
+bool RankCandidate(LocalLightInputs& out, const LocalPointLight& candidate, const float cameraPosition[3])
+{
+    InsertRankedLight(out.candidates, out.candidateCount, kLocalLightCandidatePool, candidate, cameraPosition);
+    return InsertRankedLight(out.pointLights, out.pointLightCount, kMaxLocalPointLights, candidate, cameraPosition);
+}
+}
+
+bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& camera, float margin)
 {
     if (!ProjectsView(camera))
         return true;
@@ -373,7 +401,7 @@ bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& c
         {{0.0f, -p[5], -p[9] - 1.0f}, 0.0f},
     };
     for (const ViewPlane& plane : planes)
-        if (SphereBeyondPlane(centre, light.cutoff, plane))
+        if (SphereBeyondPlane(centre, light.cutoff + margin, plane))
             return false;
     return true;
 }
@@ -421,30 +449,17 @@ double LocalLightPriority(const LocalPointLight& light, const float cameraPositi
 bool SelectLocalPointLight(LocalLightInputs& out, const LocalPointLight& light, const float cameraPosition[3],
                            const PointLightUpload& upload)
 {
-    if (out.pointLightCount > kMaxLocalPointLights || out.candidateCount > kLocalLightCandidatePool ||
-        !ValidVector(cameraPosition, -kMaxWorldCoordinate, kMaxWorldCoordinate) ||
-        !ValidVector(light.position, -kMaxWorldCoordinate, kMaxWorldCoordinate) ||
-        !ValidVector(light.color, 0.0f, kMaxLightComponent) || !std::isfinite(upload.intensity) ||
-        upload.intensity < 0.0f)
-        return false;
-    LocalPointLight candidate = light;
-    UploadedPointLightColor(candidate.color, upload, candidate.uploadedColor);
-    candidate.cutoff = PointLightCutoff(candidate.uploadedColor, candidate.attenuation);
-    if (candidate.cutoff <= 0.0f)
-        return false;
-    InsertRankedLight(out.candidates, out.candidateCount, kLocalLightCandidatePool, candidate, cameraPosition);
-    return InsertRankedLight(out.pointLights, out.pointLightCount, kMaxLocalPointLights, candidate, cameraPosition);
+    LocalPointLight candidate;
+    return CandidateInputsValid(out, light, cameraPosition, upload) && BoundCandidate(light, upload, candidate) &&
+           RankCandidate(out, candidate, cameraPosition);
 }
 
 bool SelectLocalPointLightInView(LocalLightInputs& out, const LocalPointLight& light,
                                  const LocalLightCamera& camera, const PointLightUpload& upload)
 {
-    LocalPointLight bounded = light;
-    UploadedPointLightColor(bounded.color, upload, bounded.uploadedColor);
-    bounded.cutoff = PointLightCutoff(bounded.uploadedColor, bounded.attenuation);
-    if (!PointLightMeetsView(bounded, camera))
-        return false;
-    return SelectLocalPointLight(out, light, camera.position, upload);
+    LocalPointLight candidate;
+    return CandidateInputsValid(out, light, camera.position, upload) && BoundCandidate(light, upload, candidate) &&
+           PointLightMeetsView(candidate, camera) && RankCandidate(out, candidate, camera.position);
 }
 
 bool CapturedLightsUsable(LocalLightCapture capture)

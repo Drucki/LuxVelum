@@ -216,8 +216,9 @@ void CheckLightsOutsideTheViewFreeTheirSlot()
     float weight = 0.0f;
     const bool admittedAtOnce = Uploads(inputs, 9, &weight) && weight == 1.0f && inputs.pointLightCount == 8;
     const LocalPointLight beside = StabiliserLight(10, 300.0f, 0.0f, 0.5f, 1.0f);
-    Check(behindRanksFirst && behindSkipped && admittedAtOnce && PointLightMeetsView(lights.back(), camera) &&
-              !PointLightMeetsView(beside, camera),
+    Check(behindRanksFirst && behindSkipped && admittedAtOnce &&
+              CaptureInView({lights.back()}, camera).candidateCount == 1 &&
+              CaptureInView({beside}, camera).candidateCount == 0,
           "a light whose sphere lies wholly behind or beside the view never takes a slot and is admitted at full "
           "strength the step it enters the view");
 }
@@ -251,6 +252,50 @@ void CheckLightLeavingTheViewFreesItsSlotAtOnce()
           "a slotted light the camera has passed, so its sphere left the view and the capture no longer carries "
           "it, frees its slot the same step for a newcomer at full strength, while a light that leaves the table "
           "inside the view fades");
+}
+
+float StabiliserCutoff(const LocalPointLight& light)
+{
+    float uploaded[3];
+    engine::UploadedPointLightColor(light.color, {false, 1.0f}, uploaded);
+    return engine::PointLightCutoff(uploaded, light.attenuation);
+}
+
+void CheckLightJitteringAtTheViewEdgeKeepsItsSlot()
+{
+    const LocalLightCamera camera = ForwardCamera();
+    LocalLightStabiliser stabiliser;
+    std::vector<LocalPointLight> lights;
+    for (uintptr_t i = 1; i <= 7; ++i)
+        lights.push_back(StabiliserLight(i, 0.0f, 0.0f, 50.0f * static_cast<float>(i), 1.0f));
+    LocalPointLight edge = StabiliserLight(8, 0.0f, 0.0f, 120.0f, 1.0f);
+    edge.position[0] = edge.position[2] + (StabiliserCutoff(edge) - 1.0f) * std::sqrt(2.0f);
+    lights.push_back(edge);
+    lights.push_back(StabiliserLight(9, 0.0f, 0.0f, 500.0f, 1.0f));
+    LocalLightInputs inputs = CaptureInView(lights, camera);
+    StepFrame(stabiliser, camera, 0.0, inputs);
+    const bool edgeSlotted = inputs.pointLightCount == 8 && Uploads(inputs, 8) && !Uploads(inputs, 9);
+    LocalLightCamera jittered = camera;
+    jittered.position[0] = -2.0f;
+    inputs = CaptureInView(lights, jittered);
+    const bool edgeLeft = inputs.candidateCount == 8 && !Uploads(inputs, 8);
+    StepFrame(stabiliser, jittered, kStabiliserFrameSeconds, inputs);
+    float weight = 0.0f;
+    const bool edgeDims = Uploads(inputs, 8, &weight) && weight > 0.0f && weight < 1.0f && !Uploads(inputs, 9) &&
+                          inputs.pointLightCount == 8;
+    inputs = CaptureInView(lights, camera);
+    StepFrame(stabiliser, camera, 2.0 * kStabiliserFrameSeconds, inputs);
+    const bool edgeReturns = Uploads(inputs, 8, &weight) && weight >= 0.99f && !Uploads(inputs, 9) &&
+                             stabiliser.Activity().admissions == 8 && stabiliser.Activity().fadeOuts == 0;
+    LocalLightCamera turned = camera;
+    turned.position[0] = -20.0f;
+    inputs = CaptureInView(lights, turned);
+    StepFrame(stabiliser, turned, 3.0 * kStabiliserFrameSeconds, inputs);
+    const bool edgeFreed = !Uploads(inputs, 8) && Uploads(inputs, 9, &weight) && weight == 1.0f &&
+                           stabiliser.Activity().fadeOuts == 0;
+    Check(edgeSlotted && edgeLeft && edgeDims && edgeReturns && edgeFreed,
+          "a slotted light whose sphere jitters just outside the view's edge dims and keeps its slot until it is "
+          "back, and only a sphere clearly outside the view frees the slot at once");
 }
 
 void CheckStrongerNewcomerReplacesTheWeakestSlot()
@@ -397,6 +442,7 @@ void CheckLocalLightStabiliser()
     CheckReusedNodeAddressIsANewLight();
     CheckLightsOutsideTheViewFreeTheirSlot();
     CheckLightLeavingTheViewFreesItsSlotAtOnce();
+    CheckLightJitteringAtTheViewEdgeKeepsItsSlot();
     CheckStrongerNewcomerReplacesTheWeakestSlot();
     CheckEvictedLightDoesNotRetakeItsSlot();
     CheckAttenuationDriftKeepsOneLight();

@@ -79,7 +79,7 @@ struct LocalLightInputs
     LocalLightCapture capture = LocalLightCapture::Captured;
 };
 
-bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& camera);
+bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& camera, float margin = 0.0f);
 
 namespace engine
 {

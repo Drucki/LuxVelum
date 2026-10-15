@@ -10,6 +10,7 @@ constexpr double kLocalLightSwapMargin = 1.5;
 constexpr uint32_t kLocalLightSwapCaptures = 3;
 constexpr uint32_t kLocalLightHoldCaptures = 8;
 constexpr float kLocalLightIdentityYards = 2.0f;
+constexpr float kLocalLightViewExitYards = 5.0f;
 constexpr double kLocalLightResetSeconds = 1.0;
 constexpr double kLocalLightActivityLogSeconds = 60.0;
 constexpr uint32_t kLocalLightEntries = kLocalLightCandidatePool + kMaxLocalPointLights;
