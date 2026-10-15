@@ -110,6 +110,11 @@ jobs:
         run: |
           tag="build-${RUN_NUMBER}"
           short="${SHA:0:7}"
+          head=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${BRANCH}" --jq .commit.sha)
+          if [ "$head" != "$SHA" ]; then
+            echo "::notice::${BRANCH} has moved on to ${head:0:7}; the superseded build ${short} gets no release"
+            exit 0
+          fi
           title="${BRANCH} build ${RUN_NUMBER} (${short})"
           prerelease=()
           [ "$BRANCH" = "st0ny-dev" ] || prerelease=(--prerelease)
