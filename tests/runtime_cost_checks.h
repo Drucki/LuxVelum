@@ -367,7 +367,7 @@ void CheckLocalLightLogLines(Harness& h)
           "the log says when the last point light stops being uploaded");
 
     FrameInputs rejected = empty;
-    rejected.localLights.capture = LocalLightCapture::DisabledLight;
+    rejected.localLights.capture = LocalLightCapture::TableChanged;
     rejected.farClip = empty.farClip + kFarClipStepThatLogsASummary;
     const size_t rejectedStart = ReadText(FogLogBesideTheFogDll()).size();
     frame(rejected);
@@ -377,13 +377,13 @@ void CheckLocalLightLogLines(Harness& h)
     const std::string rejectedLog = LogWrittenSince(rejectedStart);
     Check(rendered &&
               HasLine(firstRejectedFrame,
-                      "local lights: capture rejected (disabled light in the table), first on frame ") &&
+                      "local lights: capture incomplete (table changed during the walk), first on frame ") &&
               HasLine(firstRejectedFrame,
-                      "  local points 0 enabled 1, capture rejected (disabled light in the table); interior ") &&
-              CountOf(rejectedLog, "capture rejected (disabled light in the table), first on frame ") == 1 &&
-              CountOf(rejectedLog, "local lights: none uploaded, capture rejected (disabled light in the table)") ==
-                  1,
-          "a rejected point-light capture is logged with its reason on its first frame, in the frame summary and "
+                      "  local points 0 enabled 1, capture incomplete (table changed during the walk); interior ") &&
+              CountOf(rejectedLog, "capture incomplete (table changed during the walk), first on frame ") == 1 &&
+              CountOf(rejectedLog,
+                      "local lights: none uploaded, capture incomplete (table changed during the walk)") == 1,
+          "an incomplete point-light capture is logged with its reason on its first frame, in the frame summary and "
           "once settled, not as an area without lights");
     vf_test_set_config(&saved);
 }

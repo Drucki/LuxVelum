@@ -1,5 +1,7 @@
 #include "engine.h"
 
+#include "local_light_stabiliser.h"
+
 #include "log.h"
 #include "water_classify.h"
 
@@ -220,6 +222,7 @@ struct OpaqueState
 };
 
 OpaqueState g_opaque = {};
+uint32_t g_opaqueCaptures = 0;
 
 template <typename T>
 T Read(uintptr_t address)
@@ -373,6 +376,33 @@ bool ReadClassicLightInputsUnsafe(ClassicLightInputs& out)
     return Finite(out.camPos, 3) && std::isfinite(out.dayFraction);
 }
 
+double ClockSeconds()
+{
+    static const double frequency = [] {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        return static_cast<double>(f.QuadPart);
+    }();
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    return static_cast<double>(now.QuadPart) / frequency;
+}
+
+LocalLightStabiliser& FogLightStabiliser()
+{
+    static LocalLightStabiliser stabiliser;
+    return stabiliser;
+}
+
+void StabiliseLocalLights(FrameInputs& out)
+{
+    LocalLightCamera camera;
+    std::memcpy(camera.position, out.camPos, sizeof(camera.position));
+    std::memcpy(camera.cameraRelativeView, out.cameraRelativeView, sizeof(camera.cameraRelativeView));
+    std::memcpy(camera.glProjection, out.glProjection, sizeof(camera.glProjection));
+    FogLightStabiliser().Step(camera, out.mapId, g_opaqueCaptures, ClockSeconds(), out.localLights);
+}
+
 bool BuildFrameInputsUnsafe(FrameInputs& out, bool withPointLights, const PointLightUpload& upload)
 {
     std::memcpy(out.cameraRelativeView, g_opaque.cameraRelativeView, sizeof(out.cameraRelativeView));
@@ -404,6 +434,8 @@ bool BuildFrameInputsUnsafe(FrameInputs& out, bool withPointLights, const PointL
     out.mapId = Read<int32_t>(kCurrentMap);
     out.lightParams = ReadLightParamsSelection();
     CaptureLocalLightInputs(out.camPos, withPointLights, upload, out.localLights);
+    if (withPointLights)
+        StabiliseLocalLights(out);
 
     out.zoneFogDistance = Read<float>(kZoneFogDistance);
     out.clientGlowAmount = out.inLiquid ? 0.0f : GlowScreenEffectAmount();
@@ -869,6 +901,7 @@ void CaptureOpaqueState(IDirect3DDevice9* device)
     }
     state.valid = ok;
     g_opaque = state;
+    ++g_opaqueCaptures;
 }
 
 void CaptureOpaqueState(IDirect3DDevice9* device, const float* cameraRelativeView, const float* glProjection)
@@ -878,6 +911,7 @@ void CaptureOpaqueState(IDirect3DDevice9* device, const float* cameraRelativeVie
     std::memcpy(state.glProjection, glProjection, sizeof(state.glProjection));
     state.valid = SUCCEEDED(device->GetViewport(&state.viewport)) && UsableOpaqueState(state);
     g_opaque = state;
+    ++g_opaqueCaptures;
 }
 
 bool HasOpaqueState()

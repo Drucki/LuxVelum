@@ -295,11 +295,28 @@ uint64_t UploadedLightSet(const LocalLightInputs& lights, uint32_t uploaded)
     return set;
 }
 
+void DescribeLightPool(const LocalLightInputs& lights, uint32_t uploaded, char* text, size_t size)
+{
+    size_t written = 0;
+    text[0] = '\0';
+    if (lights.candidateCount > uploaded)
+        written += static_cast<size_t>(std::snprintf(text, size, ", %u in reach", lights.candidateCount));
+    if ((lights.skippedDisabled || lights.skippedNonPoint) && written < size)
+        std::snprintf(text + written, size - written, ", %u disabled and %u non-point nodes skipped",
+                      lights.skippedDisabled, lights.skippedNonPoint);
+}
+
+const char* CaptureShortfall(LocalLightCapture capture)
+{
+    return engine::CapturedLightsUsable(capture) ? "incomplete" : "rejected";
+}
+
 void DescribeCaptureRejection(LocalLightCapture capture, char* text, size_t size)
 {
     text[0] = 0;
     if (capture != LocalLightCapture::Captured)
-        std::snprintf(text, size, ", capture rejected (%s)", engine::LocalLightCaptureName(capture));
+        std::snprintf(text, size, ", capture %s (%s)", CaptureShortfall(capture),
+                      engine::LocalLightCaptureName(capture));
 }
 
 float PeakUploadedColor(const LocalPointLight& light)
@@ -465,8 +482,8 @@ void Renderer::LogFirstLocalLightRejection(LocalLightCapture capture)
     if (capture == LocalLightCapture::Captured || (m_loggedLocalLightRejections & reason))
         return;
     m_loggedLocalLightRejections |= reason;
-    VF_LOG_INFO("local lights: capture rejected (%s), first on frame %u", engine::LocalLightCaptureName(capture),
-                m_frame);
+    VF_LOG_INFO("local lights: capture %s (%s), first on frame %u", CaptureShortfall(capture),
+                engine::LocalLightCaptureName(capture), m_frame);
 }
 
 void Renderer::LogUploadedLocalLights(const FrameInputs& in, const Config& cfg, uint32_t uploaded)
@@ -503,8 +520,10 @@ void Renderer::LogUploadedLocalLights(const FrameInputs& in, const Config& cfg, 
         nearest = std::min(nearest, CameraDistance(lights[i], in.camPos));
     }
     const float* colour = lights[brightest].uploadedColor;
-    VF_LOG_INFO("local lights: %u uploaded, brightest %s (%.4g %.4g %.4g), nearest %.1f yd", uploaded,
-                LocalLightUpload(cfg).linear ? "linear" : "gamma", colour[0], colour[1], colour[2], nearest);
+    char pool[kCaptureRejectionText];
+    DescribeLightPool(in.localLights, uploaded, pool, sizeof(pool));
+    VF_LOG_INFO("local lights: %u uploaded, brightest %s (%.4g %.4g %.4g), nearest %.1f yd%s", uploaded,
+                LocalLightUpload(cfg).linear ? "linear" : "gamma", colour[0], colour[1], colour[2], nearest, pool);
     if (detailed)
         for (uint32_t i = 0; i < uploaded; ++i)
             LogUploadedLight(i, lights[i], in.camPos);

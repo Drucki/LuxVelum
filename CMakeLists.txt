@@ -123,6 +123,8 @@ target_compile_definitions(imgui
             IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS WIN32_LEAN_AND_MEAN NOMINMAX)
 
 add_library(CoAVolFog SHARED
+    src/client_code.cpp
+    src/client_light_stay.cpp
     src/client_ripple_sprites.cpp
     src/config.cpp
     src/d3d9_wrap.cpp
@@ -136,6 +138,7 @@ add_library(CoAVolFog SHARED
     src/gpu_timing.cpp
     src/grading_renderer.cpp
     src/hooks.cpp
+    src/local_light_stabiliser.cpp
     src/log.cpp
     src/msaa_depth.cpp
     src/noise_volume.cpp
@@ -161,8 +164,9 @@ add_library(version SHARED proxy/version_proxy.cpp proxy/version.def)
 target_link_libraries(version PRIVATE CoAVolFog)
 target_compile_definitions(version PRIVATE WIN32_LEAN_AND_MEAN)
 
-add_executable(vfog_harness tests/harness.cpp src/client_ripple_sprites.cpp src/config.cpp src/engine_actors.cpp
-               src/engine_lights.cpp
+add_executable(vfog_harness tests/harness.cpp src/client_code.cpp src/client_light_stay.cpp
+               src/client_ripple_sprites.cpp src/config.cpp src/engine_actors.cpp
+               src/engine_lights.cpp src/local_light_stabiliser.cpp
                src/fog_data.cpp src/fog_model.cpp src/gpu_timing.cpp src/log.cpp src/noise_volume.cpp
                src/transparent_fog.cpp src/water_contacts.cpp src/water_data.cpp src/water_spectrum.cpp
                src/water_fft.cpp src/water_ripples.cpp src/status_log.cpp)

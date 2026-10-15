@@ -1,3 +1,4 @@
+#include "client_light_stay.h"
 #include "client_ripple_sprites.h"
 #include "config.h"
 #include "engine.h"
@@ -7,6 +8,7 @@
 #include "fullscreen_triangle.h"
 #include "gpu_timing.h"
 #include "grading_renderer.h"
+#include "local_light_stabiliser.h"
 #include "log.h"
 #include "msaa_depth.h"
 #include "noise_volume.h"
@@ -1784,6 +1786,8 @@ void CheckSettingsWindowKeepsItsSize(Harness& h, const PanelRect& expected, cons
 #include "authored_fog_checks.h"
 #include "fog_integration_checks.h"
 #include "local_lights_checks.h"
+#include "local_light_stabiliser_checks.h"
+#include "client_light_stay_checks.h"
 #include "noise_variation_checks.h"
 #include "classic_phase_checks.h"
 #include "march_layer_checks.h"
@@ -1959,7 +1963,10 @@ int Run(const std::wstring& outDir, const std::string& dataPath, const std::wstr
     CheckFogIntegration(h.dev);
     CheckLocalLightInputs();
     CheckPointLightTableCapture();
+    CheckInteriorInputsSurviveAnIncompleteWalk();
     CheckHdrLocalLightColours();
+    local_light_stabiliser_checks::CheckLocalLightStabiliser();
+    client_light_stay_checks::CheckClientLightStay();
     CheckInteriorFogInputs();
     CheckNoiseVariation(h.dev);
     authored_noise::CheckAuthoredNoiseOnTheGpu(h.dev);

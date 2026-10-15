@@ -71,6 +71,24 @@ its chromaticity, `(c/peak)^2.2 · peak`, as the modern client scales light colo
 its CPU packing). Every point light scatters with one Henyey–Greenstein phase normalised to 1 toward the light,
 g = `LocalLightPhase`, as the modern fog-light kernel 6227851 reads one g for all local lights.
 
+The eight uploaded lights are chosen by a stabiliser rather than re-ranked from scratch every frame. Every capture
+ranks up to 24 candidates by their irradiance at the camera; a light whose sphere lies wholly outside the view
+frustum takes no slot. A candidate is the light already known when it has the same node address within 2 yd, so a
+colour or attenuation that animates between captures stays one light. A free slot goes to the visible candidate
+with the highest smoothed priority (0.3 s) at once. An occupied slot changes hands only when a candidate's smoothed
+priority exceeds 1.5 times that of the weakest slot for three captures in a row, one swap at a time, and a light
+that leaves the client's table, is evicted or falls out of reach fades out over 0.25 s instead of vanishing, and no
+slot changes hands while one is still fading out. A light that has faded keeps its smoothed priority while it is
+still captured inside the view and fades back in from 0 if it wins a slot again, so the challenger that evicted it
+is not undercut by its momentary rank; a light whose sphere leaves the view is forgotten and re-enters as a new
+light. A capture that walked nothing
+(damaged table, table changed, read fault) keeps the previous set for up to eight captures. The stabiliser steps
+once per captured world frame; when the frame inputs are read a second time in the same frame (the early composite
+and the whole-frame pass can both read them) the stabilised set is replayed, so hysteresis and holds count frames.
+Within the last 50 yd before a light's camera-distance gate (reach + 200 yd) its colour fades to 0, so a far light
+does not pop in at a fixed distance. `LightStay` keeps the client from disabling a light whose model is not drawn
+(see World lights), which otherwise also ends its fog glow the moment the source leaves the frame.
+
 Fog renders once after the world, including its late geometry and the native sun/moon glare, and before screen
 effects and the UI. While it draws, the stock fog is pushed out of range for the world render and restored
 afterwards; frames without volumetric fog keep the stock fog, and an unexpected draw failure restores it on the
@@ -415,6 +433,17 @@ Engine notes behind the code:
   native spotlight cone has been established.
   Registration skips a disabled light (`0x834C79`, `83 7E 60 00`) and the enable setter `0x8356F0` re-registers or
   unlinks it (`0x835716`, `0x835720`–`0x835740`), so the table holds only enabled lights.
+  Lights carry a frame stamp at `+4` that the client writes only when the light's model is drawn (`0x828B9C`), and
+  the map light query `0x81E400` disables every light with a stale stamp through `0x8356F0`, so a torch that leaves
+  the frustum is unlinked from the table the fog walks; the `je` at `0x81E548` is the branch that skips that
+  disable call (St0ny's AIO WoW EXE Patcher No. 70 "lightstay" turns its opcode `74` into `EB` at file offset
+  `0x41D948`, which its patch table records as holding `74` in the stock exe; with the image base `0x400000` and
+  `.text` at RVA `0x1000` for raw offset `0x400`, that file offset is VA `0x81E548`). `LightStay=1` writes the same
+  byte in memory at start-up, after `EngineHooks=1` passed the image check, when the opcode is `74` or `EB` and the
+  block the `je` skips (rel8 5..64) holds a `call` to `0x8356F0`; the bytes around the branch have not been
+  recorded from a disassembly, only this structure, so the guard is looser than the byte guards of the other sites
+  and the patcher itself lists No. 70 as untested. Lights whose model is not drawn then keep their last position
+  and colour; removal of the model still unregisters them (`0x824D30`).
 - Interiors. `0x795D40` stores the camera's WMO instance at `[0xCD87A4]`, its active group IDs at `[0xCDB0DC]`
   and their count at `[0xCDB0D8]`. The instance's root is at `+0xF4`; the root's loaded flag is `+0x1E0`, its
   group count `+0x1F4` (set at `0x7D7F18`, bounded at `0x7AE467`) and inline group pointers start at `+0x1F8`;
@@ -425,8 +454,12 @@ Engine notes behind the code:
 - Capture guards. Before reading the light and interior inputs, the module checks the image timestamp and base
   and the instruction bytes at `0x4F90EC`, `0x834C8D`, `0x834D3C`, `0x835539`, `0x7A11B0`, `0x7A11C7`,
   `0x7AEA83` and `0x7F1931`. Reads are SEH-guarded with pointer, span and count limits (512 nodes per bucket,
-  8192 in total, links checked against their owner); no client references survive the capture, and invalid
-  inputs give an empty result. `LocalLights=0` skips the point-light walk.
+  links checked against their owner); no client references survive the capture. A disabled or non-point node is
+  skipped and counted, a walk beyond 8192 nodes stops as truncated, and a damaged link, a table that changed during
+  the walk or a read fault end the walk; in each case the lights read before it stay usable and the reason is
+  logged once. The interior inputs are read after the walk whatever it returned and kept when their reads were
+  consistent; a read fault leaves them exterior. An unsupported client or an out-of-range camera gives an empty
+  result. `LocalLights=0` skips the point-light walk.
 - Water pass. `0x77F020` jumps to `0x790A80`, which calls the liquid renderer `0x8A2240` at `0x790AA2`
   (`E8 99 17 11 00`) with ECX = `[0xCD8610]` (`0x790A91`), the camera `0xCD8F5C` and pass 1 (`0x790A9B`, `6A 01`);
   it is a thiscall that returns with `ret 8` (`0x8A2376`). The same `0x77F020` runs from `0x4F9170` (camera above
@@ -587,13 +620,14 @@ are logged with the feature they leave off.
 
 ## Settings
 
-`CoAVolFog.ini` is re-read within a second while the game runs (except `Enable` and `EngineHooks`); its comments
-describe every key. In the game, `Ctrl+F7` opens the same settings in a window (see In-game settings).
+`CoAVolFog.ini` is re-read within a second while the game runs (except `Enable`, `EngineHooks` and `LightStay`);
+its comments describe every key. In the game, `Ctrl+F7` opens the same settings in a window (see In-game settings).
 
 | Key | Default | Meaning |
 |---|---|---|
 | `Enable` | 1 | Master switch (restart) |
 | `EngineHooks` | 1 | Install the hooks; 0 leaves the client unmodified (restart) |
+| `LightStay` | 1 | Keep point lights on while their model is not drawn, exe patch No. 70 in memory (restart, hooks) |
 | `Overlay` | 1 | In-game settings window; 0 hides it at once, and from the next start leaves the game window alone |
 | `OverlayKey` | Ctrl+F7 | Key that shows and hides the window, with optional `Ctrl+`, `Shift+`, `Alt+` |
 | `Quality` | 2 | 1 quarter resolution / 16 steps, 2 half / 24, 3 half / 32 |
@@ -668,6 +702,12 @@ Forever in the game, so by default colours still differ from Classic.
 - Local lighting captures the current M2 scene's point-light table. It does not create spotlight cones or local
   shadows, and coverage of WMO-only lights is unverified. Influence is capped at 200 yd, with a smooth outer
   fade and an attenuation denominator floor of 1.
+- The light stabiliser, the tolerant table walk and `LightStay` are harness-checked only; no owner test has run
+  with them yet, and the exe patch that `LightStay` mirrors is listed as untested by its patcher. With
+  `LightStay=1` a source that moves while its model is not drawn (a carried lantern) keeps lighting its last drawn
+  spot, in the fog and in the client's own model lighting, until it is drawn again; the client's own choice of four
+  lights per model is unchanged. `LightStay` is the only setting that changes an instruction of the client's own
+  code; the hooks retarget call sites and vtable slots to the DLL.
 - Transparent materials without depth writes are fogged at the depth behind them.
   With `TransparentFog=1` (harness-checked only) M2 effects take one line fitted to the fog of the first 100 yd,
   which cannot follow height fog and fully fogs effects past its end (500–900 yd in tests), so far glows vanish.

@@ -420,6 +420,7 @@ void ConfigStore::Apply(const Config& edited)
     Config c = edited;
     c.enable = m_config.enable;
     c.hooks = m_config.hooks;
+    c.lightStay = m_config.lightStay;
     c.overlay = m_config.overlay;
     c.overlayKey = m_config.overlayKey;
     ClampLiveSettings(c);
@@ -482,9 +483,11 @@ void ConfigStore::ReadKeepingStartupSwitches()
 {
     bool enable = m_config.enable;
     bool hooks = m_config.hooks;
+    bool lightStay = m_config.lightStay;
     Read();
     m_config.enable = enable;
     m_config.hooks = hooks;
+    m_config.lightStay = lightStay;
 }
 
 void ConfigStore::Read()
@@ -501,6 +504,7 @@ Config ConfigStore::ReadFile() const
     const std::string& p = m_path;
     c.enable = ReadInt(p, "Enable", 1, 0, 1) != 0;
     c.hooks = ReadInt(p, "EngineHooks", 1, 0, 1) != 0;
+    c.lightStay = ReadInt(p, "LightStay", 1, 0, 1) != 0;
     c.overlay = ReadInt(p, "Overlay", 1, 0, 1) != 0;
     c.overlayKey = ReadHotkey(p, "OverlayKey", c.overlayKey);
     ForEachIntSetting([&](const IntSetting& s) { c.*s.value = ReadInt(p, s.key, c.*s.value, s.lo, s.hi); });

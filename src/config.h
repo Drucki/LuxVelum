@@ -25,6 +25,7 @@ struct Config
 {
     bool enable = true;
     bool hooks = true;
+    bool lightStay = true;
     bool overlay = true;
     Hotkey overlayKey = kDefaultOverlayHotkey;
     int quality = 2;

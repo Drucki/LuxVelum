@@ -1,25 +1,11 @@
 #pragma once
 
+#include "client_code.h"
+
 #include <cstddef>
 #include <cstdint>
 
-constexpr size_t kMaxClientGuardBytes = 16;
 constexpr double kClientSpriteGraceSeconds = 1.0;
-
-struct ClientCodeGuard
-{
-    const char* name;
-    uintptr_t address;
-    size_t size;
-    unsigned char bytes[kMaxClientGuardBytes];
-};
-
-struct ClientCodeView
-{
-    uintptr_t base = 0;
-    const unsigned char* bytes = nullptr;
-    size_t size = 0;
-};
 
 namespace engine
 {

@@ -1,3 +1,4 @@
+#include "client_light_stay.h"
 #include "client_ripple_sprites.h"
 #include "config.h"
 #include "d3d9_wrap.h"
@@ -19,6 +20,33 @@
 
 namespace
 {
+void LogLightStay(LightStayOutcome outcome)
+{
+    char bytes[64];
+    switch (outcome)
+    {
+    case LightStayOutcome::Applied:
+        VF_LOG_INFO("light stay: je -> jmp at 0x%08X; point lights stay enabled while their model is not drawn",
+                    static_cast<unsigned>(kStaleLightKeepBranch));
+        return;
+    case LightStayOutcome::AlreadyInClient:
+        VF_LOG_INFO("light stay: the client already keeps off-screen point lights enabled (jmp at 0x%08X)",
+                    static_cast<unsigned>(kStaleLightKeepBranch));
+        return;
+    case LightStayOutcome::CodeDiffers:
+        engine::DescribeStaleLightBranch({}, bytes, sizeof(bytes));
+        VF_LOG_ERROR("light stay skipped: the code at 0x%08X (%s) is not the 12340 client's je over the call to the "
+                     "light enable setter 0x%08X",
+                     static_cast<unsigned>(kStaleLightKeepBranch), bytes,
+                     static_cast<unsigned>(kPointLightEnableSetter));
+        return;
+    case LightStayOutcome::WriteFailed:
+        VF_LOG_ERROR("light stay skipped: the client code at 0x%08X could not be written",
+                     static_cast<unsigned>(kStaleLightKeepBranch));
+        return;
+    }
+}
+
 std::string ModuleDirectory(HMODULE module)
 {
     char path[MAX_PATH] = {};
@@ -54,6 +82,8 @@ void Attach(HMODULE module)
     }
     const bool engineHooks = InstallEngineHooks();
     AllowFogOnNewDevices(engineHooks);
+    if (cfg.lightStay)
+        LogLightStay(engine::KeepLightsOnOffScreen({}));
     if (engineHooks)
     {
         PrepareAuthoredNoise();

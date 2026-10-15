@@ -21,33 +21,6 @@ const ClientCodeGuard kClientRippleGate[] = {
      {0xD9, 0x41, 0x28, 0xA1, 0x58, 0xFB, 0xAD, 0x00, 0xD8, 0x1D, 0xA4, 0x76, 0xCD, 0x00}},
 };
 
-const unsigned char* CodeAt(const ClientCodeView& code, uintptr_t address, size_t size)
-{
-    if (!code.bytes)
-        return reinterpret_cast<const unsigned char*>(address);
-    if (address < code.base || address - code.base > code.size || size > code.size - (address - code.base))
-        return nullptr;
-    return code.bytes + (address - code.base);
-}
-
-bool GuardMatchesUnsafe(const ClientCodeView& code, const ClientCodeGuard& guard)
-{
-    const unsigned char* bytes = CodeAt(code, guard.address, guard.size);
-    return bytes && std::memcmp(bytes, guard.bytes, guard.size) == 0;
-}
-
-bool GuardMatches(const ClientCodeView& code, const ClientCodeGuard& guard)
-{
-    __try
-    {
-        return GuardMatchesUnsafe(code, guard);
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return false;
-    }
-}
-
 bool ReadGate(volatile int32_t* gate, int32_t& value)
 {
     __try
@@ -86,7 +59,7 @@ const ClientCodeGuard* ClientRippleGateGuards(size_t& count)
 bool ClientRippleGateCodeMatches(const ClientCodeView& code)
 {
     for (const ClientCodeGuard& guard : kClientRippleGate)
-        if (!GuardMatches(code, guard))
+        if (!ClientGuardMatches(code, guard))
         {
             VF_LOG_ERROR("water: the client's %s at 0x%08X differs from the 12340 client; its splash and wake sprites "
                          "are left alone",
