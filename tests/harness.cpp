@@ -1896,7 +1896,10 @@ int Run(const std::wstring& outDir, const std::string& dataPath, const std::wstr
     {
         CheckLocalLightInputs();
         CheckPointLightTableCapture();
+        CheckInteriorInputsSurviveAnIncompleteWalk();
         CheckHdrLocalLightColours();
+        local_light_stabiliser_checks::CheckLocalLightStabiliser();
+        client_light_stay_checks::CheckClientLightStay();
         CheckInteriorFogInputs();
         water_contact_checks::CheckWaterContacts();
         CoUninitialize();
