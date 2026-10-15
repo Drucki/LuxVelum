@@ -124,7 +124,9 @@ of the classes drawn this frame, copies the water surface's depth, and draws one
 class that replaces the client's water colour. It runs before weather, alpha models and the fog, so the fog is
 integrated against the water surface. The waves are a GPU FFT (Tessendorf/Phillips spectra with Forever's tile
 parameters, 256² or 128² per tile, normalised to 256² so the wave height does not depend on the resolution) that
-yields slopes, slope variance and a persistent foam state per tile. The shading ports Forever's deferred water pass
+yields slopes, slope variance and a persistent foam state per tile; the slope moments and the foam state carry full
+mip chains and are sampled with the pixel's footprint on the water plane, so distant water seen at a grazing angle
+averages the tile instead of aliasing it into row streaks. The shading ports Forever's deferred water pass
 (Beer–Lambert absorption, Henyey–Greenstein in-scattering, the EnvBRDF reflection weight, foam compositing); its
 unknown sun lookup table is replaced by a GGX lobe and its reflection probe by a screen-space march against the
 pre-water copies. Frames without queued water skip the pass entirely.

@@ -1332,7 +1332,7 @@ void WaterRenderer::BindClassTextures(IDirect3DDevice9* dev, const WaterPreset& 
         BindSampler(dev, kFirstSurfaceStage + k, surface ? surface : m_flat, D3DTADDRESS_WRAP, D3DTEXF_LINEAR,
                     D3DTEXF_LINEAR);
         BindSampler(dev, kFirstFoamStateStage + k, foam ? foam : m_flat, D3DTADDRESS_WRAP, D3DTEXF_LINEAR,
-                    D3DTEXF_NONE);
+                    D3DTEXF_LINEAR);
     }
     const FoamMaskTexture* wave = WaveFoamMasks(preset);
     IDirect3DTexture9* shore = MaskTexture(preset.masks[kShoreFoamSlot]);

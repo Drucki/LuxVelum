@@ -87,7 +87,7 @@ float4 SampleTile(sampler2D tile, WaterPixel w, float inverseSize)
 
 float2 SampleFoamState(sampler2D state, WaterPixel w, float inverseSize)
 {
-    return tex2Dlod(state, float4(w.position.xy * inverseSize, 0, 0)).xy;
+    return SampleTile(state, w, inverseSize).xy;
 }
 
 float Tanh(float x)
