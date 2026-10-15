@@ -73,26 +73,27 @@ g = `LocalLightPhase`, as the modern fog-light kernel 6227851 reads one g for al
 
 The eight uploaded lights are chosen by a stabiliser rather than re-ranked from scratch every frame. Every capture ranks
 the lights whose sphere meets the view frustum, at any distance, by their irradiance at the camera into a pool of up to
-24 candidates, equal irradiance ranking the nearer light first; the view test precedes the ranking, so bright lights
-behind the camera cannot crowd a far light ahead out of the pool, and a light whose sphere lies wholly outside the view
-takes no slot. A candidate is the light already known when it has the same node address within 2 yd, so a colour or
-attenuation that animates between captures stays one light. A free slot goes to the visible candidate with the highest
-smoothed priority (0.3 s) at once. An occupied slot changes hands only when a candidate's smoothed priority exceeds 1.5
-times that of the weakest slot for three captures in a row, one swap at a time, and a light that leaves the client's
-table, is evicted, dims to nothing or is crowded out of the candidate pool fades out over 0.25 s instead of vanishing,
-and no slot changes hands while one is still fading out. A light that has faded keeps its smoothed priority while it is
-still captured inside the view and fades back in from 0 if it wins a slot again, so the challenger that evicted it is
-not undercut by its momentary rank. A slotted light whose last captured sphere lies more than 5 yd outside the view is
-forgotten at once, freeing its slot the same step, and re-enters as a new light; one that only jitters across the view's
-edge, or moves out of the view while its last captured position still meets it, dims over 0.25 s and ramps back if it
-returns within that time, so a sphere on the edge does not hand its slot back and forth. A capture that walked nothing
-(damaged table, table changed, read fault) keeps the previous set for up to eight captures. The stabiliser steps once
-per captured world frame; when the frame inputs are read a second time in the same frame (the early composite and the
-whole-frame pass can both read them) the stabilised set is replayed, so hysteresis and holds count frames. There is no
-camera-distance bound: a light stays while its sphere meets the view and the client keeps it in the table, which the
-client's own doodad loading bounds; the march evaluates a far light's scattering only on the steps where the ray crosses
-its sphere. `LightStay` keeps the client from disabling a light whose model is not drawn (see World lights), which
-otherwise also ends its fog glow the moment the source leaves the frame.
+24 candidates, equal irradiance ranking the nearer light first; the view test precedes the ranking, so a light whose
+sphere lies wholly outside the view takes no slot. A light behind or beside the camera still competes while its sphere
+reaches into the view, which a sphere of up to 200 yd does from as far away. A candidate is the light already known when
+it has the same node address within 2 yd, so a colour or attenuation that animates between captures stays one light. A
+free slot goes to the visible candidate with the highest smoothed priority (0.3 s) at once. An occupied slot changes
+hands only when a candidate's smoothed priority exceeds 1.5 times that of the weakest slot for three captures in a row,
+one swap at a time, and a light that leaves the client's table, is evicted, dims to nothing or is crowded out of the
+candidate pool fades out over 0.25 s instead of vanishing, and no slot changes hands while one is still fading out. A
+light that has faded keeps its smoothed priority while it is still captured inside the view and fades back in from 0 if
+it wins a slot again, so the challenger that evicted it is not undercut by its momentary rank. A slotted light whose
+last captured sphere lies more than 5 yd outside the view is forgotten at once, freeing its slot the same step, and
+re-enters as a new light; one that only jitters across the view's edge, or moves out of the view while its last captured
+position still meets it, dims over 0.25 s and ramps back if it returns within that time, so a sphere on the edge does
+not hand its slot back and forth. A capture that walked nothing (damaged table, table changed, read fault) keeps the
+previous set for up to eight captures. The stabiliser steps once per captured world frame; when the frame inputs are
+read a second time in the same frame (the early composite and the whole-frame pass can both read them) the stabilised
+set is replayed, so hysteresis and holds count frames. There is no camera-distance bound: a light stays while its sphere
+meets the view and the client keeps it in the table, which the client's own doodad loading bounds; the march evaluates a
+far light's scattering only on the steps where the ray crosses its sphere. `LightStay` keeps the client from disabling a
+light whose model is not drawn (see World lights), which otherwise also ends its fog glow the moment the source leaves
+the frame.
 
 Fog renders once after the world, including its late geometry and the native sun/moon glare, and before screen
 effects and the UI. While it draws, the stock fog is pushed out of range for the world render and restored
@@ -695,7 +696,7 @@ its comments describe every key. In the game, `Ctrl+F7` opens the same settings 
 | `SunScatter`, `Ambient`, `Exposure` | 1, 1, 1 | Light in the fog |
 | `ClassicExposure` | 1 | Brightness of the Classic layers (1 = as authored) |
 | `ClassicPhase` | 0 | Classic sun and moon scattering: 0 phase peaks at 1 toward the light, 1 energy-normalised |
-| `LocalLights`, `LocalLightIntensity` | 1, 1 | Scatter up to eight nearby world point lights; intensity 0..8 |
+| `LocalLights`, `LocalLightIntensity` | 1, 1 | Scatter up to eight world point lights in view; intensity 0..8 |
 | `LocalLightPhase` | 0.3 | Henyey–Greenstein g of every point light in the fog, −0.9..0.9 (a calibration) |
 | `InteriorAware`, `InteriorDensity` | 1, 0.15 | Fade outdoor layers indoors, keeping this fraction of their density |
 | `InteriorFarFog` | 1.0 | Native distance-fog density retained indoors (0..1); lower values clear dungeon haze |

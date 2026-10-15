@@ -200,9 +200,9 @@ bool DrawLight(Config& c)
     changed |= Toggle("Linear light", c.colorSpace,
                       "Scatter and blend in linear light like the modern client, with a soft highlight roll-off. "
                       "Off: gamma");
-    changed |= Toggle("Local lights", c.localLights, "Scatter nearby point lights from the world into the fog");
+    changed |= Toggle("Local lights", c.localLights, "Scatter point lights in view from the world into the fog");
     changed |= Slider("Local light intensity", c.localLightIntensity, 0.0f, 8.0f, "%.2f",
-                      "Brightness of nearby point lights in the fog");
+                      "Brightness of the point lights in the fog");
     changed |= Slider("Local light phase", c.localLightPhase, -0.9f, 0.9f, "%.2f",
                       "How every point light scatters in the fog: 0 evenly in all directions; toward 0.9 mostly in "
                       "the fog between you and the light; below 0 the fog behind the light, steeply brighter toward "
