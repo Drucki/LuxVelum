@@ -547,13 +547,32 @@ cmake --build build --config Release
 Outputs in `build/Release`: `version.dll`, `CoAVolFog.dll` and `vfog_harness.exe`, with `CoAVolFog.ini`,
 `fogdata.bin` and `waterdata.bin` copied beside them.
 
+### Download a CI build
+
+The [Windows release build](https://github.com/jealous-sound/coa-vfog/actions/workflows/release.yml) runs on every
+push to `main` (including merged pull requests), on pull requests targeting `main`, and manually from
+**Actions → Windows release build → Run workflow**. The manual button becomes available after the workflow is
+merged into `main`; select a branch to rebuild that revision.
+
+Open a successful run and download its `CoAVolFog-Win32-<commit>` artifact under **Artifacts**. GitHub supplies a
+ZIP containing `version.dll`, `CoAVolFog.dll`, `CoAVolFog.ini`, `fogdata.bin`, `waterdata.bin`, the README, licenses
+and a `BUILD.txt` identifying the commit and validation. Artifacts are kept for 30 days; rerun the workflow to
+rebuild an expired download. Pull-request artifacts are builds of GitHub's proposed merge revision.
+
+CI uses Windows Server 2022, MSVC 2022 and `fxc` to build Win32 Release, then runs the comment check and the CPU
+harness. The CPU harness exercises the existing data, fog model, local-light/interior, settings persistence,
+glow and water-contact checks before any D3D9 device is created. CI runs CTest with `-LE gpu`; the full
+`vfog_harness` remains enabled by default for a Windows machine with a suitable graphics device. A successful CI
+build does not establish graphics correctness or in-game appearance and performance.
+
 ## Test
 
 ```powershell
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-This runs the comment check and `vfog_harness`, which creates a real D3D9 device through the wrapper with the
+This runs the comment check, the CPU-only `interior_fog` transition and INI persistence checks, and
+`vfog_harness`, which creates a real D3D9 device through the wrapper with the
 client's flags (`0x52`, auto depth D24X8), renders a Z-up test scene with the client's projection convention,
 and runs the fog passes through the same entry the hook uses. Its checks, in `tests/`, cover the device wrapper
 and state restoration, depth and sky handling, Classic light blending and slot selection, the march against CPU
@@ -589,6 +608,26 @@ Close the client, then copy `version.dll`, `CoAVolFog.dll`, `CoAVolFog.ini`, `fo
 next to `Ascension.exe`.
 Remove `version.dll` and `CoAVolFog.dll` to uninstall; nothing else in the client is changed. The DLL
 writes `CoAVolFog.log` next to itself.
+
+## Steam Deck and Linux (Proton)
+
+Install the files as above, then set the game's Steam launch options to:
+
+```sh
+WINEDLLOVERRIDES=version=n,b %command%
+```
+
+This lets the native `version.dll` proxy load CoAVolFog before Proton's builtin version library.
+A Steam Deck test on 8 October 2026 (Proton with DXVK, AMD VanGogh, 1280x800) loaded the DLL and installed
+all hooks. DXVK copied the multisampled depth through `RESZ` into `INTZ`, passing the depth-copy self-test,
+so the default `Multisampling=1` worked on this device.
+
+With `Quality=2` and the game's Multisampling set to 2x, the tested scene held 60 fps at 69% GPU utilisation,
+914 MHz and 2.8 W. At 8x, median GPU costs were 6.47 ms per frame for fog and 2.81 ms for water; GPU
+utilisation was 97% at 1,600 MHz and 8.3 W. These are effect GPU costs, excluding CPU work and the client's
+own rendering, and observations of one scene rather than a frame-rate guarantee. Start with 2x on the Deck;
+if a scene still dips, lower water quality, then fog quality. No defaults are changed by these notes.
+Other Linux hardware and Proton/DXVK versions have not been verified by this test.
 
 ## Log
 
@@ -646,6 +685,7 @@ its comments describe every key. In the game, `Ctrl+F7` opens the same settings 
 | `LocalLights`, `LocalLightIntensity` | 1, 1 | Scatter up to eight nearby world point lights; intensity 0..8 |
 | `LocalLightPhase` | 0.3 | Henyey–Greenstein g of every point light in the fog, −0.9..0.9 (a calibration) |
 | `InteriorAware`, `InteriorDensity` | 1, 0.15 | Fade outdoor layers indoors, keeping this fraction of their density |
+| `InteriorFarFog` | 1.0 | Native distance-fog density retained indoors (0..1); lower values clear dungeon haze |
 | `GodRays` | 0 | Radial sky rays, 0 = off |
 | `GlowCompensation` | 1 | Pre-compensate the fog for the client's glow |
 | `ForeverGlow` | 0 | 1 gives the client's glow Forever's per-light amount where Classic lights cover the camera |
@@ -691,8 +731,9 @@ Forever in the game, so by default colours still differ from Classic.
 - The fog has been tested in the client with native D3D9 on an RTX 2060 laptop. A first modern-water build ran
   there on Elwynn lakes and the Darkshore coast; the review fixes since (direct-light shading, narrower shore
   foam, fogged reflections, the dry-frame skip) are harness-checked only. Changes to lighting and occlusion require
-  an owner test; the offline harness does not establish in-game appearance or performance. Other GPU vendors,
-  integrated GPUs, DXVK and Wine are untested.
+  an owner test; the offline harness does not establish in-game appearance or performance. Other GPU vendors
+  and integrated GPUs are untested except for the Proton/DXVK Steam Deck result above; other Wine
+  configurations remain untested.
 - The composite and the lit march need more than the 512 instruction slots guaranteed by
   [baseline pixel shader 3.0](
   https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx9-graphics-reference-asm-ps-3-0), and lower
@@ -715,7 +756,8 @@ Forever in the game, so by default colours still differ from Classic.
   through doorways may differ.
 - The `gxApi d3d9ex` path is not wrapped (fog and the settings window stay off there). The settings window also
   needs a fog device, so it is missing when INTZ depth is unsupported.
-- Multisampling is harness-checked only (NVAPI on the RTX 2060; `RESZ` untested); alpha-tested foliage stays jagged.
+- Multisampling is harness-checked on the RTX 2060 (NVAPI) and tested in game on the Steam Deck
+  (`RESZ` through DXVK, see above); alpha-tested foliage stays jagged.
 - The silhouette split sees one copied depth sample per pixel, so sub-pixel geometry it misses takes the far fog.
 - The distance fog (`FarFog`, maps without Classic data) has no modern counterpart: it stands in for the stock
   fog up to the 3.3.5 far clip, which is far shorter than the modern client's.

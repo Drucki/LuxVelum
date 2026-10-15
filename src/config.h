@@ -47,6 +47,7 @@ struct Config
     float localLightPhase = 0.3f;
     bool interiorAware = true;
     float interiorDensity = 0.15f;
+    float interiorFarFog = 1.0f;
     float noiseAmount = 0.15f;
     float noiseScale = 0.025f;
     float noiseWindSpeed = 0.5f;
