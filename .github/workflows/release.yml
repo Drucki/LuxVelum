@@ -117,8 +117,8 @@ jobs:
             echo "Win32 Release build of \`${BRANCH}\` at ${short}."
             echo
             echo "With the client closed, unzip \`CoAVolFog-Win32.zip\` into the client folder next to \`Wow.exe\`,"
-            echo "replacing \`version.dll\`, \`CoAVolFog.dll\`, \`CoAVolFog.ini\` (the default settings), \`fogdata.bin\`"
-            echo "and \`waterdata.bin\`. \`BUILD.txt\` names the commit."
+            echo "replacing \`version.dll\`, \`CoAVolFog.dll\`, \`CoAVolFog.ini\` (the default settings),"
+            echo "\`fogdata.bin\` and \`waterdata.bin\`. \`BUILD.txt\` names the commit."
             echo
             echo "Validation: build, source comments and CPU harness passed in [run ${RUN_NUMBER}](${RUN_URL})."
             echo "D3D9 graphics checks and in-game validation were not run."
