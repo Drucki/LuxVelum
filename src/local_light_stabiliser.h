@@ -14,13 +14,6 @@ constexpr double kLocalLightResetSeconds = 1.0;
 constexpr double kLocalLightActivityLogSeconds = 60.0;
 constexpr uint32_t kLocalLightEntries = kLocalLightCandidatePool + kMaxLocalPointLights;
 
-struct LocalLightCamera
-{
-    float position[3] = {};
-    float cameraRelativeView[16] = {};
-    float glProjection[16] = {};
-};
-
 struct LocalLightActivity
 {
     uint32_t admissions = 0;
@@ -28,8 +21,6 @@ struct LocalLightActivity
     uint32_t fadeOuts = 0;
     uint32_t heldCaptures = 0;
 };
-
-bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& camera);
 
 class LocalLightStabiliser
 {

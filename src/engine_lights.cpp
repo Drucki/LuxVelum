@@ -133,10 +133,43 @@ bool InsertRankedLight(LocalPointLight* list, uint32_t& count, uint32_t capacity
     return true;
 }
 
-float DistanceGate(double distance, double limit)
+struct ViewPlane
 {
-    const double remaining = (limit - distance) / kLocalPointLightGateFadeYards;
-    return static_cast<float>(std::clamp(remaining, 0.0, 1.0));
+    float normal[3];
+    float offset;
+};
+
+void ViewSpacePosition(const LocalPointLight& light, const LocalLightCamera& camera, float out[3])
+{
+    float relative[3];
+    for (int i = 0; i < 3; ++i)
+        relative[i] = light.position[i] - camera.position[i];
+    const float* m = camera.cameraRelativeView;
+    for (int j = 0; j < 3; ++j)
+        out[j] = relative[0] * m[0 * 4 + j] + relative[1] * m[1 * 4 + j] + relative[2] * m[2 * 4 + j];
+}
+
+float ProjectionNear(const float* projection)
+{
+    const float divisor = 1.0f + projection[10];
+    const float nearPlane = divisor != 0.0f ? -projection[14] / divisor : 0.0f;
+    return std::isfinite(nearPlane) ? std::max(nearPlane, 0.0f) : 0.0f;
+}
+
+bool ProjectsView(const LocalLightCamera& camera)
+{
+    const float* p = camera.glProjection;
+    return std::isfinite(p[0]) && std::isfinite(p[5]) && p[0] != 0.0f && p[5] != 0.0f;
+}
+
+bool SphereBeyondPlane(const float centre[3], float radius, const ViewPlane& plane)
+{
+    const float* n = plane.normal;
+    const float length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    if (!(length > 0.0f))
+        return false;
+    const float signedDistance = (n[0] * centre[0] + n[1] * centre[1] + n[2] * centre[2] + plane.offset) / length;
+    return signedDistance > radius;
 }
 
 template <size_t Size>
@@ -203,7 +236,7 @@ LocalPointLight CapturedLight(const NativePointLight& native, uintptr_t address)
     return light;
 }
 
-LocalLightCapture CapturePointLightsUnsafe(uintptr_t sceneSlot, const float cameraPosition[3],
+LocalLightCapture CapturePointLightsUnsafe(uintptr_t sceneSlot, const LocalLightCamera& camera,
                                            const PointLightUpload& upload, LocalLightInputs& out)
 {
     const uintptr_t scene = Read<uintptr_t>(sceneSlot);
@@ -236,7 +269,7 @@ LocalLightCapture CapturePointLightsUnsafe(uintptr_t sceneSlot, const float came
             else if (!native.enabled)
                 ++out.skippedDisabled;
             else
-                engine::SelectLocalPointLight(out, CapturedLight(native, address), cameraPosition, upload);
+                engine::SelectLocalPointLightInView(out, CapturedLight(native, address), camera, upload);
             previousLink = address + offsetof(NativePointLight, next);
             address = native.next;
         }
@@ -286,11 +319,11 @@ bool CaptureInteriorUnsafe(const CameraInteriorWords& words, LocalLightInputs& o
     return true;
 }
 
-LocalLightCapture CaptureInputsUnsafe(const LightCaptureSources& sources, const float cameraPosition[3],
+LocalLightCapture CaptureInputsUnsafe(const LightCaptureSources& sources, const LocalLightCamera& camera,
                                       bool withPointLights, const PointLightUpload& upload, LocalLightInputs& out)
 {
     const LocalLightCapture points =
-        withPointLights ? CapturePointLightsUnsafe(sources.sceneSlot, cameraPosition, upload, out)
+        withPointLights ? CapturePointLightsUnsafe(sources.sceneSlot, camera, upload, out)
                         : LocalLightCapture::Captured;
     const bool interior = CaptureInteriorUnsafe(sources.interior, out);
     if (points != LocalLightCapture::Captured)
@@ -298,12 +331,12 @@ LocalLightCapture CaptureInputsUnsafe(const LightCaptureSources& sources, const 
     return interior ? LocalLightCapture::Captured : LocalLightCapture::InteriorRejected;
 }
 
-LocalLightCapture CaptureInputsGuarded(const LightCaptureSources& sources, const float cameraPosition[3],
+LocalLightCapture CaptureInputsGuarded(const LightCaptureSources& sources, const LocalLightCamera& camera,
                                        bool withPointLights, const PointLightUpload& upload, LocalLightInputs& out)
 {
     __try
     {
-        return CaptureInputsUnsafe(sources, cameraPosition, withPointLights, upload, out);
+        return CaptureInputsUnsafe(sources, camera, withPointLights, upload, out);
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
@@ -311,18 +344,38 @@ LocalLightCapture CaptureInputsGuarded(const LightCaptureSources& sources, const
     }
 }
 
-LocalLightCapture CapturePointLightTableGuarded(uintptr_t sceneSlot, const float cameraPosition[3],
+LocalLightCapture CapturePointLightTableGuarded(uintptr_t sceneSlot, const LocalLightCamera& camera,
                                                 const PointLightUpload& upload, LocalLightInputs& out)
 {
     __try
     {
-        return CapturePointLightsUnsafe(sceneSlot, cameraPosition, upload, out);
+        return CapturePointLightsUnsafe(sceneSlot, camera, upload, out);
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
         return LocalLightCapture::ReadFault;
     }
 }
+}
+
+bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& camera)
+{
+    if (!ProjectsView(camera))
+        return true;
+    float centre[3];
+    ViewSpacePosition(light, camera, centre);
+    const float* p = camera.glProjection;
+    const ViewPlane planes[] = {
+        {{0.0f, 0.0f, -1.0f}, ProjectionNear(p)},
+        {{p[0], 0.0f, p[8] - 1.0f}, 0.0f},
+        {{-p[0], 0.0f, -p[8] - 1.0f}, 0.0f},
+        {{0.0f, p[5], p[9] - 1.0f}, 0.0f},
+        {{0.0f, -p[5], -p[9] - 1.0f}, 0.0f},
+    };
+    for (const ViewPlane& plane : planes)
+        if (SphereBeyondPlane(centre, light.cutoff, plane))
+            return false;
+    return true;
 }
 
 namespace engine
@@ -376,19 +429,22 @@ bool SelectLocalPointLight(LocalLightInputs& out, const LocalPointLight& light, 
         return false;
     LocalPointLight candidate = light;
     UploadedPointLightColor(candidate.color, upload, candidate.uploadedColor);
-    const float reach = PointLightCutoff(candidate.uploadedColor, candidate.attenuation);
-    const double limit = reach + kMaxLocalPointLightRadius;
-    const double distance = std::sqrt(SquaredDistance(candidate.position, cameraPosition));
-    if (reach <= 0.0f || distance > limit)
-        return false;
-    const float gate = DistanceGate(distance, limit);
-    for (int channel = 0; channel < 3; ++channel)
-        candidate.uploadedColor[channel] *= gate;
     candidate.cutoff = PointLightCutoff(candidate.uploadedColor, candidate.attenuation);
     if (candidate.cutoff <= 0.0f)
         return false;
     InsertRankedLight(out.candidates, out.candidateCount, kLocalLightCandidatePool, candidate, cameraPosition);
     return InsertRankedLight(out.pointLights, out.pointLightCount, kMaxLocalPointLights, candidate, cameraPosition);
+}
+
+bool SelectLocalPointLightInView(LocalLightInputs& out, const LocalPointLight& light,
+                                 const LocalLightCamera& camera, const PointLightUpload& upload)
+{
+    LocalPointLight bounded = light;
+    UploadedPointLightColor(bounded.color, upload, bounded.uploadedColor);
+    bounded.cutoff = PointLightCutoff(bounded.uploadedColor, bounded.attenuation);
+    if (!PointLightMeetsView(bounded, camera))
+        return false;
+    return SelectLocalPointLight(out, light, camera.position, upload);
 }
 
 bool CapturedLightsUsable(LocalLightCapture capture)
@@ -420,38 +476,37 @@ const char* LocalLightCaptureName(LocalLightCapture capture)
     return "unknown";
 }
 
-LocalLightCapture CapturePointLightTable(uintptr_t sceneSlot, const float cameraPosition[3],
+LocalLightCapture CapturePointLightTable(uintptr_t sceneSlot, const LocalLightCamera& camera,
                                          const PointLightUpload& upload, LocalLightInputs& out)
 {
     LocalLightInputs captured;
-    const LocalLightCapture result = CapturePointLightTableGuarded(sceneSlot, cameraPosition, upload, captured);
+    const LocalLightCapture result = CapturePointLightTableGuarded(sceneSlot, camera, upload, captured);
     out = CapturedLightsUsable(result) ? captured : LocalLightInputs{};
     out.capture = result;
     return result;
 }
 
-LocalLightCapture CaptureLightInputsFrom(const LightCaptureSources& sources, const float cameraPosition[3],
+LocalLightCapture CaptureLightInputsFrom(const LightCaptureSources& sources, const LocalLightCamera& camera,
                                          bool withPointLights, const PointLightUpload& upload, LocalLightInputs& out)
 {
     LocalLightInputs captured;
-    const LocalLightCapture result =
-        CaptureInputsGuarded(sources, cameraPosition, withPointLights, upload, captured);
+    const LocalLightCapture result = CaptureInputsGuarded(sources, camera, withPointLights, upload, captured);
     out = CapturedLightsUsable(result) ? captured : LocalLightInputs{};
     out.capture = result;
     return result;
 }
 
-bool CaptureLocalLightInputs(const float cameraPosition[3], bool withPointLights, const PointLightUpload& upload,
+bool CaptureLocalLightInputs(const LocalLightCamera& camera, bool withPointLights, const PointLightUpload& upload,
                              LocalLightInputs& out)
 {
     out = {};
     static const bool supported = SupportedLayout();
     if (!supported)
         out.capture = LocalLightCapture::UnsupportedClient;
-    else if (!ValidVector(cameraPosition, -kMaxWorldCoordinate, kMaxWorldCoordinate))
+    else if (!ValidVector(camera.position, -kMaxWorldCoordinate, kMaxWorldCoordinate))
         out.capture = LocalLightCapture::CameraOutOfRange;
     else
-        CaptureLightInputsFrom(kClientLightSources, cameraPosition, withPointLights, upload, out);
+        CaptureLightInputsFrom(kClientLightSources, camera, withPointLights, upload, out);
     return out.capture == LocalLightCapture::Captured;
 }
 }

@@ -9,15 +9,7 @@ constexpr int kStabiliserMap = 1;
 
 LocalLightCamera ForwardCamera()
 {
-    LocalLightCamera camera;
-    for (int i = 0; i < 4; ++i)
-        camera.cameraRelativeView[i * 4 + i] = 1.0f;
-    camera.glProjection[0] = 1.0f;
-    camera.glProjection[5] = 1.0f;
-    camera.glProjection[10] = (kStabiliserFar + kStabiliserNear) / (kStabiliserFar - kStabiliserNear);
-    camera.glProjection[11] = 1.0f;
-    camera.glProjection[14] = -2.0f * kStabiliserFar * kStabiliserNear / (kStabiliserFar - kStabiliserNear);
-    return camera;
+    return ForwardViewCamera(kStabiliserNear, kStabiliserFar);
 }
 
 void SetPeak(LocalPointLight& light, float peak)
@@ -60,6 +52,14 @@ LocalLightInputs CaptureOf(const std::vector<LocalPointLight>& lights, const Loc
     LocalLightInputs inputs;
     for (const LocalPointLight& light : lights)
         engine::SelectLocalPointLight(inputs, light, camera.position, {false, 1.0f});
+    return inputs;
+}
+
+LocalLightInputs CaptureInView(const std::vector<LocalPointLight>& lights, const LocalLightCamera& camera)
+{
+    LocalLightInputs inputs;
+    for (const LocalPointLight& light : lights)
+        engine::SelectLocalPointLightInView(inputs, light, camera, {false, 1.0f});
     return inputs;
 }
 
@@ -222,6 +222,37 @@ void CheckLightsOutsideTheViewFreeTheirSlot()
           "strength the step it enters the view");
 }
 
+void CheckLightLeavingTheViewFreesItsSlotAtOnce()
+{
+    const LocalLightCamera camera = ForwardCamera();
+    LocalLightStabiliser stabiliser;
+    std::vector<LocalPointLight> lights;
+    for (uintptr_t i = 1; i <= 8; ++i)
+        lights.push_back(StabiliserLight(i, 0.0f, 0.0f, 50.0f * static_cast<float>(i), 1.0f));
+    LocalLightInputs inputs = CaptureInView(lights, camera);
+    StepFrame(stabiliser, camera, 0.0, inputs);
+    const bool eightAhead = inputs.pointLightCount == 8 && Uploads(inputs, 1);
+    LocalLightCamera moved = camera;
+    moved.position[2] = 230.0f;
+    lights.push_back(StabiliserLight(9, 0.0f, 0.0f, 270.0f, 1.0f));
+    inputs = CaptureInView(lights, moved);
+    const bool firstLeftBehind = inputs.candidateCount == 8 && !Uploads(inputs, 1);
+    StepFrame(stabiliser, moved, kStabiliserFrameSeconds, inputs);
+    float weight = 0.0f;
+    const bool swappedAtOnce = !Uploads(inputs, 1) && Uploads(inputs, 9, &weight) && weight == 1.0f &&
+                               inputs.pointLightCount == 8;
+    lights.erase(lights.begin() + 1);
+    inputs = CaptureInView(lights, moved);
+    StepFrame(stabiliser, moved, 2.0 * kStabiliserFrameSeconds, inputs);
+    const bool removedInViewFades = Uploads(inputs, 2, &weight) && weight > 0.0f && weight < 1.0f &&
+                                    inputs.pointLightCount == 8;
+    Check(eightAhead && firstLeftBehind && swappedAtOnce && removedInViewFades &&
+              stabiliser.Activity().fadeOuts == 0,
+          "a slotted light the camera has passed, so its sphere left the view and the capture no longer carries "
+          "it, frees its slot the same step for a newcomer at full strength, while a light that leaves the table "
+          "inside the view fades");
+}
+
 void CheckStrongerNewcomerReplacesTheWeakestSlot()
 {
     const LocalLightCamera camera = ForwardCamera();
@@ -365,6 +396,7 @@ void CheckLocalLightStabiliser()
     CheckRejectedCapturesHoldTheLastSet();
     CheckReusedNodeAddressIsANewLight();
     CheckLightsOutsideTheViewFreeTheirSlot();
+    CheckLightLeavingTheViewFreesItsSlotAtOnce();
     CheckStrongerNewcomerReplacesTheWeakestSlot();
     CheckEvictedLightDoesNotRetakeItsSlot();
     CheckAttenuationDriftKeepsOneLight();

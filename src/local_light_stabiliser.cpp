@@ -8,39 +8,6 @@
 
 namespace
 {
-struct ViewPlane
-{
-    float normal[3];
-    float offset;
-};
-
-void ViewSpacePosition(const LocalPointLight& light, const LocalLightCamera& camera, float out[3])
-{
-    float relative[3];
-    for (int i = 0; i < 3; ++i)
-        relative[i] = light.position[i] - camera.position[i];
-    const float* m = camera.cameraRelativeView;
-    for (int j = 0; j < 3; ++j)
-        out[j] = relative[0] * m[0 * 4 + j] + relative[1] * m[1 * 4 + j] + relative[2] * m[2 * 4 + j];
-}
-
-float ProjectionNear(const float* projection)
-{
-    const float divisor = 1.0f + projection[10];
-    const float near = divisor != 0.0f ? -projection[14] / divisor : 0.0f;
-    return std::isfinite(near) ? std::max(near, 0.0f) : 0.0f;
-}
-
-bool SphereBeyondPlane(const float centre[3], float radius, const ViewPlane& plane)
-{
-    const float* n = plane.normal;
-    const float length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-    if (!(length > 0.0f))
-        return false;
-    const float signedDistance = (n[0] * centre[0] + n[1] * centre[1] + n[2] * centre[2] + plane.offset) / length;
-    return signedDistance > radius;
-}
-
 bool SameLight(const LocalPointLight& a, const LocalPointLight& b)
 {
     double distanceSquared = 0.0;
@@ -70,24 +37,6 @@ bool PersistentFailure(const LocalLightInputs& lights)
     return lights.capture == LocalLightCapture::UnsupportedClient ||
            lights.capture == LocalLightCapture::CameraOutOfRange;
 }
-}
-
-bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& camera)
-{
-    float centre[3];
-    ViewSpacePosition(light, camera, centre);
-    const float* p = camera.glProjection;
-    const ViewPlane planes[] = {
-        {{0.0f, 0.0f, -1.0f}, ProjectionNear(p)},
-        {{p[0], 0.0f, p[8] - 1.0f}, 0.0f},
-        {{-p[0], 0.0f, -p[8] - 1.0f}, 0.0f},
-        {{0.0f, p[5], p[9] - 1.0f}, 0.0f},
-        {{0.0f, -p[5], -p[9] - 1.0f}, 0.0f},
-    };
-    for (const ViewPlane& plane : planes)
-        if (SphereBeyondPlane(centre, light.cutoff, plane))
-            return false;
-    return true;
 }
 
 void LocalLightStabiliser::Reset()
@@ -200,6 +149,12 @@ void LocalLightStabiliser::MatchCandidates(const LocalLightCamera& camera, const
         entry->smoothedPriority = Smoothed(entry->smoothedPriority, priority, dt);
         entry->present = inView;
         entry->outOfView = !inView;
+    }
+    for (uint32_t i = 0; i < m_count; ++i)
+    {
+        Entry& entry = m_entries[i];
+        if (!entry.present && !PointLightMeetsView(entry.light, camera))
+            entry.outOfView = true;
     }
 }
 

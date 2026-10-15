@@ -6,7 +6,6 @@ constexpr uint32_t kMaxLocalPointLights = 8;
 constexpr uint32_t kLocalLightCandidatePool = 24;
 constexpr float kLocalPointLightContributionCutoff = 1.0f / 256.0f;
 constexpr float kMaxLocalPointLightRadius = 200.0f;
-constexpr float kLocalPointLightGateFadeYards = 50.0f;
 constexpr float kLocalLightGamma = 2.2f;
 
 constexpr uintptr_t kWmoInstanceRoot = 0xF4;
@@ -35,6 +34,13 @@ struct PointLightUpload
 {
     bool linear = true;
     float intensity = 1.0f;
+};
+
+struct LocalLightCamera
+{
+    float position[3] = {};
+    float cameraRelativeView[16] = {};
+    float glProjection[16] = {};
 };
 
 struct LocalPointLight
@@ -73,6 +79,8 @@ struct LocalLightInputs
     LocalLightCapture capture = LocalLightCapture::Captured;
 };
 
+bool PointLightMeetsView(const LocalPointLight& light, const LocalLightCamera& camera);
+
 namespace engine
 {
 void UploadedPointLightColor(const float captured[3], const PointLightUpload& upload, float uploaded[3]);
@@ -80,13 +88,15 @@ float PointLightCutoff(const float color[3], const float attenuation[3]);
 double LocalLightPriority(const LocalPointLight& light, const float cameraPosition[3]);
 bool SelectLocalPointLight(LocalLightInputs& out, const LocalPointLight& light, const float cameraPosition[3],
                            const PointLightUpload& upload);
+bool SelectLocalPointLightInView(LocalLightInputs& out, const LocalPointLight& light,
+                                 const LocalLightCamera& camera, const PointLightUpload& upload);
 bool CapturedLightsUsable(LocalLightCapture capture);
 const char* LocalLightCaptureName(LocalLightCapture capture);
-LocalLightCapture CapturePointLightTable(uintptr_t sceneSlot, const float cameraPosition[3],
+LocalLightCapture CapturePointLightTable(uintptr_t sceneSlot, const LocalLightCamera& camera,
                                          const PointLightUpload& upload, LocalLightInputs& out);
-LocalLightCapture CaptureLightInputsFrom(const LightCaptureSources& sources, const float cameraPosition[3],
+LocalLightCapture CaptureLightInputsFrom(const LightCaptureSources& sources, const LocalLightCamera& camera,
                                          bool withPointLights, const PointLightUpload& upload,
                                          LocalLightInputs& out);
-bool CaptureLocalLightInputs(const float cameraPosition[3], bool withPointLights, const PointLightUpload& upload,
+bool CaptureLocalLightInputs(const LocalLightCamera& camera, bool withPointLights, const PointLightUpload& upload,
                              LocalLightInputs& out);
 }

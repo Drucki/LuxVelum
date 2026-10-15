@@ -25,6 +25,19 @@ LocalPointLight PointLightFixture(float x)
     return light;
 }
 
+LocalLightCamera ForwardViewCamera(float nearPlane, float farPlane)
+{
+    LocalLightCamera camera;
+    for (int i = 0; i < 4; ++i)
+        camera.cameraRelativeView[i * 4 + i] = 1.0f;
+    camera.glProjection[0] = 1.0f;
+    camera.glProjection[5] = 1.0f;
+    camera.glProjection[10] = (farPlane + nearPlane) / (farPlane - nearPlane);
+    camera.glProjection[11] = 1.0f;
+    camera.glProjection[14] = -2.0f * farPlane * nearPlane / (farPlane - nearPlane);
+    return camera;
+}
+
 void CheckLocalLightInputs()
 {
     LocalPointLight light = PointLightFixture(0.0f);
@@ -77,24 +90,42 @@ void CheckLocalLightInputs()
           "point-light selection accounts for brightness as well as distance");
     light = PointLightFixture(1000.0f);
     const bool farSelected = engine::SelectLocalPointLight(forwards, light, camera, {});
+    const bool farPooled = forwards.candidateCount == 18 && forwards.candidates[17].position[0] == 1000.0f &&
+                           LocalNear(forwards.candidates[17].uploadedColor[0], 1.0f);
     light.position[0] = InvalidLocalLightFloat();
     const bool invalidSelected = engine::SelectLocalPointLight(forwards, light, camera, {});
-    Check(!farSelected && !invalidSelected && forwards.pointLightCount == kMaxLocalPointLights,
-          "point-light selection rejects invalid positions and centres outside the capture neighbourhood");
+    Check(!farSelected && farPooled && !invalidSelected && forwards.pointLightCount == kMaxLocalPointLights,
+          "a far point light joins the candidate pool at full strength behind the nearer eight, and an invalid "
+          "position is rejected");
 
-    const float gate = std::sqrt(255.0f) + kMaxLocalPointLightRadius;
-    LocalLightInputs insideBand;
-    LocalLightInputs midBand;
-    LocalLightInputs pastGate;
-    engine::SelectLocalPointLight(insideBand, PointLightFixture(gate - kLocalPointLightGateFadeYards), camera, {});
-    engine::SelectLocalPointLight(midBand, PointLightFixture(gate - 0.5f * kLocalPointLightGateFadeYards), camera,
-                                  {});
-    engine::SelectLocalPointLight(pastGate, PointLightFixture(gate + 1.0f), camera, {});
-    Check(insideBand.pointLightCount == 1 && midBand.pointLightCount == 1 &&
-              pastGate.pointLightCount == 0 && LocalNear(insideBand.pointLights[0].uploadedColor[0], 1.0f) &&
-              LocalNear(midBand.pointLights[0].uploadedColor[0], 0.5f) &&
-              midBand.pointLights[0].cutoff < insideBand.pointLights[0].cutoff,
-          "a point light fades over the last 50 yd before its camera-distance gate instead of popping at it");
+    const LocalLightCamera ahead = ForwardViewCamera(1.0f, 1000.0f);
+    LocalPointLight distant = PointLightFixture(0.0f);
+    distant.position[2] = 900.0f;
+    LocalPointLight beside = PointLightFixture(300.0f);
+    beside.position[2] = 0.5f;
+    LocalLightInputs inView;
+    LocalLightInputs unprojected;
+    const bool distantSelected = engine::SelectLocalPointLightInView(inView, distant, ahead, {});
+    const bool besideSelected = engine::SelectLocalPointLightInView(inView, beside, ahead, {});
+    const bool besideWithoutView = engine::SelectLocalPointLightInView(unprojected, beside, LocalLightCamera{}, {});
+    Check(distantSelected && inView.pointLightCount == 1 && inView.candidateCount == 1 &&
+              LocalNear(inView.pointLights[0].uploadedColor[0], 1.0f) &&
+              LocalNear(inView.pointLights[0].cutoff, std::sqrt(255.0f)) && !besideSelected && besideWithoutView &&
+              unprojected.pointLightCount == 1,
+          "a point light is captured at full strength at any distance while its sphere meets the view, a sphere "
+          "wholly outside the view is not a candidate, and a camera without a projection sees every light");
+
+    LocalLightInputs crowded;
+    for (int i = 0; i < 30; ++i)
+    {
+        LocalPointLight behind = PointLightFixture(static_cast<float>(i % 6) - 2.5f);
+        behind.position[2] = -200.0f - static_cast<float>(i);
+        behind.color[0] = 64.0f;
+        engine::SelectLocalPointLightInView(crowded, behind, ahead, {});
+    }
+    engine::SelectLocalPointLightInView(crowded, distant, ahead, {});
+    Check(crowded.candidateCount == 1 && crowded.pointLightCount == 1 && crowded.pointLights[0].position[2] == 900.0f,
+          "thirty brighter lights wholly behind the camera cannot crowd a far light ahead out of the candidate pool");
 
     bool clearedBoth = true;
     for (bool withPointLights : {true, false})
@@ -102,7 +133,7 @@ void CheckLocalLightInputs()
         LocalLightInputs unsupported = forwards;
         unsupported.cameraInterior = true;
         unsupported.interiorBlend = 1.0f;
-        const bool captured = engine::CaptureLocalLightInputs(camera, withPointLights, {}, unsupported);
+        const bool captured = engine::CaptureLocalLightInputs(LocalLightCamera{}, withPointLights, {}, unsupported);
         clearedBoth = clearedBoth && !captured && unsupported.pointLightCount == 0 &&
                       !unsupported.cameraInterior && unsupported.interiorBlend == 0.0f &&
                       unsupported.capture == LocalLightCapture::UnsupportedClient;
@@ -166,7 +197,7 @@ void LinkPointLightTable(PointLightTable& table)
 template <typename Table>
 LocalLightCapture CaptureTable(Table& table, LocalLightInputs& out)
 {
-    const float camera[3] = {};
+    const LocalLightCamera camera;
     return engine::CapturePointLightTable(reinterpret_cast<uintptr_t>(&table.sceneSlot), camera, {}, out);
 }
 
@@ -248,7 +279,7 @@ struct CameraInteriorFixture
 LocalLightCapture CaptureWithInterior(PointLightTable& table, const CameraInteriorFixture& interior,
                                       LocalLightInputs& out)
 {
-    const float camera[3] = {};
+    const LocalLightCamera camera;
     return engine::CaptureLightInputsFrom({reinterpret_cast<uintptr_t>(&table.sceneSlot), interior.Words()}, camera,
                                           true, {}, out);
 }

@@ -394,13 +394,13 @@ LocalLightStabiliser& FogLightStabiliser()
     return stabiliser;
 }
 
-void StabiliseLocalLights(FrameInputs& out)
+LocalLightCamera FrameLightCamera(const FrameInputs& in)
 {
     LocalLightCamera camera;
-    std::memcpy(camera.position, out.camPos, sizeof(camera.position));
-    std::memcpy(camera.cameraRelativeView, out.cameraRelativeView, sizeof(camera.cameraRelativeView));
-    std::memcpy(camera.glProjection, out.glProjection, sizeof(camera.glProjection));
-    FogLightStabiliser().Step(camera, out.mapId, g_opaqueCaptures, ClockSeconds(), out.localLights);
+    std::memcpy(camera.position, in.camPos, sizeof(camera.position));
+    std::memcpy(camera.cameraRelativeView, in.cameraRelativeView, sizeof(camera.cameraRelativeView));
+    std::memcpy(camera.glProjection, in.glProjection, sizeof(camera.glProjection));
+    return camera;
 }
 
 bool BuildFrameInputsUnsafe(FrameInputs& out, bool withPointLights, const PointLightUpload& upload)
@@ -433,9 +433,10 @@ bool BuildFrameInputsUnsafe(FrameInputs& out, bool withPointLights, const PointL
     out.inLiquid = CameraInLiquid();
     out.mapId = Read<int32_t>(kCurrentMap);
     out.lightParams = ReadLightParamsSelection();
-    CaptureLocalLightInputs(out.camPos, withPointLights, upload, out.localLights);
+    const LocalLightCamera lightCamera = FrameLightCamera(out);
+    CaptureLocalLightInputs(lightCamera, withPointLights, upload, out.localLights);
     if (withPointLights)
-        StabiliseLocalLights(out);
+        FogLightStabiliser().Step(lightCamera, out.mapId, g_opaqueCaptures, ClockSeconds(), out.localLights);
 
     out.zoneFogDistance = Read<float>(kZoneFogDistance);
     out.clientGlowAmount = out.inLiquid ? 0.0f : GlowScreenEffectAmount();

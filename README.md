@@ -72,8 +72,10 @@ its CPU packing). Every point light scatters with one Henyey–Greenstein phase 
 g = `LocalLightPhase`, as the modern fog-light kernel 6227851 reads one g for all local lights.
 
 The eight uploaded lights are chosen by a stabiliser rather than re-ranked from scratch every frame. Every capture
-ranks up to 24 candidates by their irradiance at the camera; a light whose sphere lies wholly outside the view
-frustum takes no slot. A candidate is the light already known when it has the same node address within 2 yd, so a
+ranks the lights whose sphere meets the view frustum, at any distance, by their irradiance at the camera into a
+pool of up to 24 candidates; the view test precedes the ranking, so bright lights behind the camera cannot crowd a
+far light ahead out of the pool, and a light whose sphere lies wholly outside the view takes no slot. A candidate
+is the light already known when it has the same node address within 2 yd, so a
 colour or attenuation that animates between captures stays one light. A free slot goes to the visible candidate
 with the highest smoothed priority (0.3 s) at once. An occupied slot changes hands only when a candidate's smoothed
 priority exceeds 1.5 times that of the weakest slot for three captures in a row, one swap at a time, and a light
@@ -85,9 +87,9 @@ light. A capture that walked nothing
 (damaged table, table changed, read fault) keeps the previous set for up to eight captures. The stabiliser steps
 once per captured world frame; when the frame inputs are read a second time in the same frame (the early composite
 and the whole-frame pass can both read them) the stabilised set is replayed, so hysteresis and holds count frames.
-Within the last 50 yd before a light's camera-distance gate (reach + 200 yd) its colour fades to 0, so a far light
-does not pop in at a fixed distance. `LightStay` keeps the client from disabling a light whose model is not drawn
-(see World lights), which otherwise also ends its fog glow the moment the source leaves the frame.
+There is no camera-distance bound: a light stays while its sphere meets the view and the client keeps it in the
+table, which the client's own doodad loading bounds. `LightStay` keeps the client from disabling a light whose
+model is not drawn (see World lights), which otherwise also ends its fog glow the moment the source leaves the frame.
 
 Fog renders once after the world, including its late geometry and the native sun/moon glare, and before screen
 effects and the UI. While it draws, the stock fog is pushed out of range for the world render and restored
@@ -429,7 +431,8 @@ Engine notes behind the code:
   are already transformed to world space before the setter (`0x828AF4`). The diffuse already includes the
   animated intensity and model scale (`0x8305B9`–`0x8305FE`) and is uploaded unchanged (`0x835527`,
   `0x6A462F`). The attenuation is uploaded as `D3DLIGHT9::Attenuation0/1/2` (`0x835539`, `0x6A46AC`) with the
-  fixed range 10000 (`[0xA2F95C]`), so the fog's 200-yd bound and eight-light selection are its own policy. No
+  fixed range 10000 (`[0xA2F95C]`), so the 200-yd cap on a fog light's sphere and the eight-light selection are
+  the fog's own policy. No
   native spotlight cone has been established.
   Registration skips a disabled light (`0x834C79`, `83 7E 60 00`) and the enable setter `0x8356F0` re-registers or
   unlinks it (`0x835716`, `0x835720`–`0x835740`), so the table holds only enabled lights.
@@ -741,10 +744,13 @@ Forever in the game, so by default colours still differ from Classic.
   its name, HRESULT and the shader caps; native fog remains the fallback.
 - Scene geometry does not shadow the fog's sunlight.
 - Local lighting captures the current M2 scene's point-light table. It does not create spotlight cones or local
-  shadows, and coverage of WMO-only lights is unverified. Influence is capped at 200 yd, with a smooth outer
-  fade and an attenuation denominator floor of 1.
-- The light stabiliser, the tolerant table walk and `LightStay` are harness-checked only; no owner test has run
-  with them yet, and the exe patch that `LightStay` mirrors is listed as untested by its patcher. With
+  shadows, and coverage of WMO-only lights is unverified. A light's sphere is capped at 200 yd and its attenuation
+  denominator floored at 1; it shows at any camera distance while its sphere meets the view and the client keeps
+  it loaded.
+- In the owner's test of 2026-10-15 the flicker was gone with the stabiliser, the tolerant table walk and
+  `LightStay` together; which of them ended it was not separated, the view-only selection without a
+  camera-distance bound is harness-checked only, and the exe patch that `LightStay` mirrors is listed as untested
+  by its patcher. With
   `LightStay=1` a source that moves while its model is not drawn (a carried lantern) keeps lighting its last drawn
   spot, in the fog and in the client's own model lighting, until it is drawn again; the client's own choice of four
   lights per model is unchanged. `LightStay` is the only setting that changes an instruction of the client's own
