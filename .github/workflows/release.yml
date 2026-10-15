@@ -2,7 +2,7 @@ name: Windows release build
 
 on:
   push:
-    branches: [main]
+    branches: [main, st0ny-dev]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -77,3 +77,55 @@ jobs:
             build/Release/CoAVolFog.log
           if-no-files-found: ignore
           retention-days: 7
+
+  release:
+    name: Publish the install archive as a release
+    needs: build
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/st0ny-'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download install files
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: CoAVolFog-Win32-${{ github.sha }}
+          path: package
+
+      - name: Zip install files
+        run: |
+          cd package
+          zip -r ../CoAVolFog-Win32.zip .
+
+      - name: Create or refresh the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          tag="build-${RUN_NUMBER}"
+          short="${SHA:0:7}"
+          title="${BRANCH} build ${RUN_NUMBER} (${short})"
+          prerelease=()
+          [ "$BRANCH" = "st0ny-dev" ] || prerelease=(--prerelease)
+          {
+            echo "Win32 Release build of \`${BRANCH}\` at ${short}."
+            echo
+            echo "With the client closed, unzip \`CoAVolFog-Win32.zip\` into the client folder next to \`Wow.exe\`,"
+            echo "replacing \`version.dll\`, \`CoAVolFog.dll\`, \`CoAVolFog.ini\` (the default settings), \`fogdata.bin\`"
+            echo "and \`waterdata.bin\`. \`BUILD.txt\` names the commit."
+            echo
+            echo "Validation: build, source comments and CPU harness passed in [run ${RUN_NUMBER}](${RUN_URL})."
+            echo "D3D9 graphics checks and in-game validation were not run."
+          } > notes.md
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$tag" CoAVolFog-Win32.zip --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" CoAVolFog-Win32.zip --repo "$GITHUB_REPOSITORY" \
+              --target "$SHA" --title "$title" --notes-file notes.md "${prerelease[@]}"
+          fi

@@ -566,6 +566,11 @@ ZIP containing `version.dll`, `CoAVolFog.dll`, `CoAVolFog.ini`, `fogdata.bin`, `
 and a `BUILD.txt` identifying the commit and validation. Artifacts are kept for 30 days; rerun the workflow to
 rebuild an expired download. Pull-request artifacts are builds of GitHub's proposed merge revision.
 
+On a push to `st0ny-dev` and on manual runs a second job publishes the same files as a GitHub release `build-<run>` with
+the asset `CoAVolFog-Win32.zip`, which needs no login to download; the newest `st0ny-dev` build is always at
+`releases/latest/download/CoAVolFog-Win32.zip`, and a run from another `st0ny-*` branch is marked as a pre-release so it
+does not become the latest one. Pull requests publish no release.
+
 CI uses Windows Server 2022, MSVC 2022 and `fxc` to build Win32 Release, then runs the comment check and the CPU
 harness. The CPU harness exercises the existing data, fog model, local-light/interior, settings persistence,
 glow and water-contact checks before any D3D9 device is created. CI runs CTest with `-LE gpu`; the full
