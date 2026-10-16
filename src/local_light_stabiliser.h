@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-constexpr float kLocalLightFadeSeconds = 0.25f;
+constexpr float kLocalLightFadeSeconds = 1.0f;
 constexpr float kLocalLightPrioritySmoothingSeconds = 0.3f;
 constexpr double kLocalLightSwapMargin = 1.5;
 constexpr uint32_t kLocalLightSwapCaptures = 3;
@@ -40,7 +40,7 @@ private:
         uint32_t challengeCaptures = 0;
         bool slotted = false;
         bool evicted = false;
-        bool faded = false;
+        bool heirToEvictedSlot = false;
         bool present = false;
         bool outOfView = false;
     };
@@ -51,6 +51,7 @@ private:
     Entry* FindEntry(const LocalPointLight& light);
     Entry* AddEntry(const LocalPointLight& light, double priority);
     void AdvanceWeights(float dt);
+    static bool TakesFreeSlotBefore(const Entry& entry, const Entry& other);
     void FillFreeSlots();
     void ChallengeWeakestSlot();
     void RemoveSpentEntries();
@@ -62,6 +63,7 @@ private:
     LocalPointLight m_held[kMaxLocalPointLights] = {};
     uint32_t m_heldCount = 0;
     uint32_t m_rejectedCaptures = 0;
+    bool m_sceneStarting = true;
     int m_mapId = 0;
     uint32_t m_lastFrame = 0;
     double m_lastSeconds = 0.0;

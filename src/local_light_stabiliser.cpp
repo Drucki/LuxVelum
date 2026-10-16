@@ -44,6 +44,7 @@ void LocalLightStabiliser::Reset()
     m_count = 0;
     m_heldCount = 0;
     m_rejectedCaptures = 0;
+    m_sceneStarting = true;
 }
 
 void LocalLightStabiliser::Step(const LocalLightCamera& camera, int mapId, uint32_t frame, double seconds,
@@ -78,6 +79,7 @@ void LocalLightStabiliser::Step(const LocalLightCamera& camera, int mapId, uint3
     AdvanceWeights(dt);
     RemoveSpentEntries();
     FillFreeSlots();
+    m_sceneStarting = false;
     ChallengeWeakestSlot();
     WriteOutput(lights);
     LogActivity(seconds);
@@ -102,6 +104,13 @@ bool LocalLightStabiliser::HoldOutput(LocalLightInputs& lights)
     ++m_activity.heldCaptures;
     Replay(lights);
     return true;
+}
+
+bool LocalLightStabiliser::TakesFreeSlotBefore(const Entry& entry, const Entry& other)
+{
+    if (entry.heirToEvictedSlot != other.heirToEvictedSlot)
+        return entry.heirToEvictedSlot;
+    return entry.smoothedPriority > other.smoothedPriority;
 }
 
 LocalLightStabiliser::Entry* LocalLightStabiliser::FindEntry(const LocalPointLight& light)
@@ -187,14 +196,15 @@ void LocalLightStabiliser::FillFreeSlots()
         for (uint32_t i = 0; i < m_count; ++i)
         {
             Entry& entry = m_entries[i];
-            if (!entry.slotted && entry.present && (!best || entry.smoothedPriority > best->smoothedPriority))
+            if (!entry.slotted && entry.present && (!best || TakesFreeSlotBefore(entry, *best)))
                 best = &entry;
         }
         if (!best)
             return;
         best->slotted = true;
         best->evicted = false;
-        best->weight = best->faded ? 0.0f : 1.0f;
+        best->heirToEvictedSlot = false;
+        best->weight = m_sceneStarting ? 1.0f : 0.0f;
         best->challengeCaptures = 0;
         ++slotted;
         ++m_activity.admissions;
@@ -232,6 +242,7 @@ void LocalLightStabiliser::ChallengeWeakestSlot()
         return;
     weakest->evicted = true;
     challenger->challengeCaptures = 0;
+    challenger->heirToEvictedSlot = true;
     ++m_activity.evictions;
 }
 
@@ -248,7 +259,6 @@ void LocalLightStabiliser::RemoveSpentEntries()
                 ++m_activity.fadeOuts;
             entry.slotted = false;
             entry.evicted = false;
-            entry.faded = true;
             entry.challengeCaptures = 0;
         }
         if (entry.slotted || entry.present)

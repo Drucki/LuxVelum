@@ -6,6 +6,7 @@ constexpr double kStabiliserFrameSeconds = 1.0 / 60.0;
 constexpr float kStabiliserNear = 1.0f;
 constexpr float kStabiliserFar = 1000.0f;
 constexpr int kStabiliserMap = 1;
+constexpr int kFadeFrames = static_cast<int>(kLocalLightFadeSeconds / kStabiliserFrameSeconds + 0.5);
 
 LocalLightCamera ForwardCamera()
 {
@@ -136,11 +137,39 @@ void CheckRemovedLightFadesOut()
         fading = fading && Uploads(inputs, 2, &weight) && weight > 0.0f && weight < 1.0f &&
                  inputs.pointLights[0].nativeId == 1;
     }
-    inputs = CaptureOf(lights, camera);
-    StepFrame(stabiliser, camera, 0.3, inputs);
+    for (int frame = 7; frame <= kFadeFrames + 1; ++frame)
+    {
+        inputs = CaptureOf(lights, camera);
+        StepFrame(stabiliser, camera, frame * kStabiliserFrameSeconds, inputs);
+    }
     Check(fading && !Uploads(inputs, 2) && inputs.pointLightCount == 1,
-          "a light that leaves the client's table is still uploaded at reduced strength for the next 0.1 s and is "
-          "gone after 0.3 s");
+          "a light that leaves the client's table is still uploaded at reduced strength while it fades and is gone "
+          "once the fade time has passed");
+}
+
+void CheckLightsFadeInOnceTheSceneRuns()
+{
+    const LocalLightCamera camera = ForwardCamera();
+    LocalLightStabiliser stabiliser;
+    std::vector<LocalPointLight> lights = {StabiliserLight(1, 0.0f, 0.0f, 20.0f, 1.0f)};
+    LocalLightInputs inputs = CaptureOf(lights, camera);
+    StepFrame(stabiliser, camera, 0.0, inputs);
+    float weight = 0.0f;
+    const bool sceneLightAtOnce = Uploads(inputs, 1, &weight) && weight == 1.0f;
+    lights.push_back(StabiliserLight(2, 5.0f, 0.0f, 30.0f, 1.0f));
+    bool risesGradually = true;
+    float previous = 0.0f;
+    for (int frame = 1; frame <= kFadeFrames + 2; ++frame)
+    {
+        inputs = CaptureOf(lights, camera);
+        StepFrame(stabiliser, camera, frame * kStabiliserFrameSeconds, inputs);
+        risesGradually = risesGradually && Uploads(inputs, 2, &weight) && weight >= previous &&
+                         weight - previous <= 1.5f / kFadeFrames && (frame > 1 || weight == 0.0f);
+        previous = weight;
+    }
+    Check(sceneLightAtOnce && risesGradually && weight == 1.0f,
+          "the lights of the first capture after a reset shine at once, and a light that appears later fades in "
+          "over the fade time without a jump");
 }
 
 void CheckRejectedCapturesHoldTheLastSet()
@@ -166,7 +195,7 @@ void CheckRejectedCapturesHoldTheLastSet()
     StepFrame(stabiliser, camera, 4 * kStabiliserFrameSeconds, inputs);
     const bool resumed = SameUploadedSet(inputs, settled) && inputs.pointLights[0].uploadedColor[0] == 1.0f;
     bool released = false;
-    for (int frame = 5; frame <= 5 + static_cast<int>(kLocalLightHoldCaptures) + 20; ++frame)
+    for (int frame = 5; frame <= 5 + static_cast<int>(kLocalLightHoldCaptures) + kFadeFrames + 1; ++frame)
     {
         LocalLightInputs rejected;
         rejected.capture = LocalLightCapture::DamagedTable;
@@ -194,8 +223,9 @@ void CheckReusedNodeAddressIsANewLight()
     for (uint32_t i = 0; i < inputs.pointLightCount; ++i)
         (inputs.pointLights[i].position[0] == 10.0f ? newWeight : oldWeight) =
             inputs.pointLights[i].uploadedColor[0] / inputs.pointLights[i].color[0];
-    Check(twoLights && newWeight == 1.0f && oldWeight < 1.0f && stabiliser.Activity().admissions == 2,
-          "the same node address 10 yd away is a new light: it is admitted at once while the old one fades");
+    Check(twoLights && newWeight == 0.0f && oldWeight < 1.0f && stabiliser.Activity().admissions == 2,
+          "the same node address 10 yd away is a new light: it takes a slot at once and fades in while the old one "
+          "fades out");
 }
 
 void CheckLightsOutsideTheViewFreeTheirSlot()
@@ -214,13 +244,13 @@ void CheckLightsOutsideTheViewFreeTheirSlot()
     inputs = CaptureOf(lights, camera);
     StepFrame(stabiliser, camera, kStabiliserFrameSeconds, inputs);
     float weight = 0.0f;
-    const bool admittedAtOnce = Uploads(inputs, 9, &weight) && weight == 1.0f && inputs.pointLightCount == 8;
+    const bool admittedAtOnce = Uploads(inputs, 9, &weight) && weight == 0.0f && inputs.pointLightCount == 8;
     const LocalPointLight beside = StabiliserLight(10, 300.0f, 0.0f, 0.5f, 1.0f);
     Check(behindRanksFirst && behindSkipped && admittedAtOnce &&
               CaptureInView({lights.back()}, camera).candidateCount == 1 &&
               CaptureInView({beside}, camera).candidateCount == 0,
-          "a light whose sphere lies wholly behind or beside the view never takes a slot and is admitted at full "
-          "strength the step it enters the view");
+          "a light whose sphere lies wholly behind or beside the view never takes a slot, and it takes a free slot "
+          "the step it enters the view and fades in from there");
 }
 
 void CheckLightLeavingTheViewFreesItsSlotAtOnce()
@@ -240,7 +270,7 @@ void CheckLightLeavingTheViewFreesItsSlotAtOnce()
     const bool firstLeftBehind = inputs.candidateCount == 8 && !Uploads(inputs, 1);
     StepFrame(stabiliser, moved, kStabiliserFrameSeconds, inputs);
     float weight = 0.0f;
-    const bool swappedAtOnce = !Uploads(inputs, 1) && Uploads(inputs, 9, &weight) && weight == 1.0f &&
+    const bool swappedAtOnce = !Uploads(inputs, 1) && Uploads(inputs, 9, &weight) && weight == 0.0f &&
                                inputs.pointLightCount == 8;
     lights.erase(lights.begin() + 1);
     inputs = CaptureInView(lights, moved);
@@ -250,8 +280,8 @@ void CheckLightLeavingTheViewFreesItsSlotAtOnce()
     Check(eightAhead && firstLeftBehind && swappedAtOnce && removedInViewFades &&
               stabiliser.Activity().fadeOuts == 0,
           "a slotted light the camera has passed, so its sphere left the view and the capture no longer carries "
-          "it, frees its slot the same step for a newcomer at full strength, while a light that leaves the table "
-          "inside the view fades");
+          "it, frees its slot the same step for a newcomer that fades in, while a light that leaves the table "
+          "inside the view fades out");
 }
 
 float StabiliserCutoff(const LocalPointLight& light)
@@ -291,7 +321,7 @@ void CheckLightJitteringAtTheViewEdgeKeepsItsSlot()
     turned.position[0] = -20.0f;
     inputs = CaptureInView(lights, turned);
     StepFrame(stabiliser, turned, 3.0 * kStabiliserFrameSeconds, inputs);
-    const bool edgeFreed = !Uploads(inputs, 8) && Uploads(inputs, 9, &weight) && weight == 1.0f &&
+    const bool edgeFreed = !Uploads(inputs, 8) && Uploads(inputs, 9, &weight) && weight == 0.0f &&
                            stabiliser.Activity().fadeOuts == 0;
     Check(edgeSlotted && edgeLeft && edgeDims && edgeReturns && edgeFreed,
           "a slotted light whose sphere jitters just outside the view's edge dims and keeps its slot until it is "
@@ -315,7 +345,7 @@ void CheckStrongerNewcomerReplacesTheWeakestSlot()
         waited = waited && !Uploads(inputs, 9);
     }
     bool replaced = false;
-    for (int frame = 3; frame <= 30 && !replaced; ++frame)
+    for (int frame = 3; frame <= kFadeFrames + 10 && !replaced; ++frame)
     {
         inputs = CaptureOf(lights, camera);
         StepFrame(stabiliser, camera, frame * kStabiliserFrameSeconds, inputs);
@@ -338,7 +368,7 @@ void CheckEvictedLightDoesNotRetakeItsSlot()
     int firstStepWithoutWeakest = 0;
     bool challengerTookOver = false;
     bool weakestStayedOut = true;
-    for (int frame = 1; frame <= 90; ++frame)
+    for (int frame = 1; frame <= kFadeFrames + 30; ++frame)
     {
         SetPeak(lights.back(), frame <= 10 ? 2.6f : 0.9f);
         inputs = CaptureOf(lights, camera);
@@ -347,7 +377,7 @@ void CheckEvictedLightDoesNotRetakeItsSlot()
         {
             firstStepWithoutWeakest = frame;
             float weight = 0.0f;
-            challengerTookOver = Uploads(inputs, 9, &weight) && weight == 1.0f && inputs.pointLightCount == 8;
+            challengerTookOver = Uploads(inputs, 9, &weight) && weight == 0.0f && inputs.pointLightCount == 8;
         }
         else if (firstStepWithoutWeakest)
             weakestStayedOut = weakestStayedOut && !Uploads(inputs, 8) && Uploads(inputs, 9);
@@ -355,7 +385,7 @@ void CheckEvictedLightDoesNotRetakeItsSlot()
     Check(firstStepWithoutWeakest && challengerTookOver && weakestStayedOut &&
               stabiliser.Activity().evictions == 1 && stabiliser.Activity().admissions == 9,
           "an evicted light that is still captured does not take its slot back after fading, even when the "
-          "challenger's momentary priority has dropped below its own by then");
+          "challenger's priority has dropped below its own by then: the challenger takes the slot and fades in");
 }
 
 void CheckAttenuationDriftKeepsOneLight()
@@ -419,13 +449,13 @@ void CheckNoSwapWhileASlotFadesOut()
     lights.push_back(StabiliserLight(9, 3.0f, 0.0f, 36.0f, 2.6f));
     bool weakestSteady = true;
     int newcomerAdmitted = 0;
-    for (int frame = 1; frame <= 60; ++frame)
+    for (int frame = 1; frame <= kFadeFrames + 10; ++frame)
     {
         inputs = CaptureOf(lights, camera);
         StepFrame(stabiliser, camera, frame * kStabiliserFrameSeconds, inputs);
         float weight = 0.0f;
         weakestSteady = weakestSteady && Uploads(inputs, 8, &weight) && weight == 1.0f;
-        if (!newcomerAdmitted && Uploads(inputs, 9, &weight) && weight == 1.0f && !Uploads(inputs, 3))
+        if (!newcomerAdmitted && Uploads(inputs, 9) && !Uploads(inputs, 3))
             newcomerAdmitted = frame;
     }
     Check(weakestSteady && newcomerAdmitted && stabiliser.Activity().evictions == 0 &&
@@ -438,6 +468,7 @@ void CheckLocalLightStabiliser()
 {
     CheckBoundaryChurnIsAbsorbed();
     CheckRemovedLightFadesOut();
+    CheckLightsFadeInOnceTheSceneRuns();
     CheckRejectedCapturesHoldTheLastSet();
     CheckReusedNodeAddressIsANewLight();
     CheckLightsOutsideTheViewFreeTheirSlot();
