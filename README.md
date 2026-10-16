@@ -60,7 +60,8 @@ filter returns the average of the current samples in the 3×3 low-resolution nei
 The full-resolution composite upsamples the march through depth-validated taps. Ground seen at a grazing angle
 is interpolated from the current frame's march where the taps lie on the pixel's plane, the march is linear
 across them and no light's sphere meets the ray; thin silhouettes that every tap misses are marched at full
-resolution.
+resolution. Under authored noise the lit composite interpolates the filtered fog wherever the taps lie on the
+pixel's plane, lights and curvature aside, because its own march takes the noise at its mean (see Authored noise).
 
 Every full-screen pass draws one triangle whose edges lie outside the viewport (NDC −1.5 and 4.5), so it covers every
 4x sample of the edge columns; Direct3D 9 maps NDC −1 onto the first column's centres.
@@ -204,8 +205,16 @@ average passes through a fixed S-curve of contrast 20 about 0.5, and `f = lerp(1
 while the emission moves toward the fade colour by `1 − f`, so storm fog becomes patchier and about half as dense.
 Alpha is the share of a layer's blend weight that carries noise, and each octave scrolls as a phase in tiles, so a
 blend that changes the tile size scales the pattern about the camera. The modern `t_perlinNoise3D` is not in the kit;
-the volume here is a 64³ tileable Perlin noise built at load. The water's reflection fog, the far-clip check and the
-lit composites' full-resolution march take a noisy layer at its mean.
+the volume here is a 64³ tileable Perlin noise built at load. The water's reflection fog, the far-clip check and the lit
+composites' full-resolution march take a noisy layer at its mean; a lit composite that samples the noise would exceed
+the 32 temporary registers of ps_3_0. A march at the mean is more opaque than the noisy march on average: each long far
+step takes the noise of one point, the curve is nearly binary, and transmittance averaged over dense and clear patches
+lets more light through than a uniform half density. On grazing water the rows between the low-resolution taps match no
+tap, and where the lit composite marched them again they showed as bright horizontal lines one low-resolution texel
+apart (inferred from the code and a tester's screenshot of grazing water in rain; not yet confirmed in game), so under
+noise it interpolates the filtered fog of the taps on the pixel's plane instead. It takes the filtered fog rather than
+the current march, whose samples jitter each frame, so that the noise cannot turn the jitter into shimmer on every other
+row (inferred).
 
 `fogdata.bin` format 4 holds the lights, the light params they reference (with `LightParams.Glow`), the fog keys (with
 a grading curve index), the layers, the zone lights and their outlines, and the grading curves; the loader rejects any

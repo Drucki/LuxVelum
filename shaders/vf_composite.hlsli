@@ -199,13 +199,46 @@ bool TapsReproduceMarch(BilinearTaps taps, float viewZ)
     return MarchLinearBetweenTaps(taps);
 }
 
+bool FullResolutionMarchTakesNoiseAtItsMean()
+{
+    return kMarchesLocalLights && !kSamplesAuthoredNoise && AnyLayerNoise();
+}
+
+bool LightOnRayNeedsFullResolution(float2 pixel, float viewZ)
+{
+    [branch] if (!kMarchesLocalLights || FullResolutionMarchTakesNoiseAtItsMean())
+        return false;
+    return RayMeetsLocalLight(pixel, viewZ);
+}
+
+float4 FilteredFogBetweenTaps(BilinearTaps taps)
+{
+    float4 fog = 0;
+    [loop] for (int j = 0; j < 4; j++)
+    {
+        float2 tapOffset = float2(frac(j * 0.5) * 2, floor(j * 0.5));
+        float2 tapTexel = clamp(taps.baseTexel + tapOffset, 0, LowResSize() - 1);
+        float2 bilinearWeight = lerp(1 - taps.fraction, taps.fraction, tapOffset);
+        fog += tex2Dlod(sFog, float4(LowResTexelToUv(tapTexel), 0, 0)) * bilinearWeight.x * bilinearWeight.y;
+    }
+    return fog;
+}
+
 float4 FogWithoutMatchingTap(float2 pixel, float depth, float viewZ)
 {
-    [branch] if (!kMarchesLocalLights || !RayMeetsLocalLight(pixel, viewZ))
+    [branch] if (!LightOnRayNeedsFullResolution(pixel, viewZ))
     {
         BilinearTaps taps = GatherBilinearTaps(pixel, depth, viewZ);
-        [branch] if (TapsReproduceMarch(taps, viewZ))
-            return taps.currentMarch;
+        [branch] if (FullResolutionMarchTakesNoiseAtItsMean())
+        {
+            [branch] if (PixelOnTapPlane(taps, viewZ))
+                return FilteredFogBetweenTaps(taps);
+        }
+        else
+        {
+            [branch] if (TapsReproduceMarch(taps, viewZ))
+                return taps.currentMarch;
+        }
     }
     return IntegrateFogAtDepth(pixel, depth, 0.5);
 }

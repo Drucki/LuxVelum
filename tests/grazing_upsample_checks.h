@@ -20,10 +20,19 @@ constexpr UINT kProbeY = 12;
 constexpr int kRampStart = 25;
 constexpr int kRampStep = 2;
 constexpr int kZigzag = 10;
-constexpr int kFilteredOpacityLevel = 200;
+constexpr int kFilteredRampStart = 150;
+constexpr int kFilteredRampStep = 8;
 constexpr UINT kLightTexels = 32;
 constexpr float kLightRadius = 20.0f;
 constexpr int kTransmittanceView = 2;
+constexpr int kFirstLayerNoiseFadeRegister = 38;
+
+enum class Upsampled
+{
+    CurrentMarch,
+    FilteredFog,
+    FullResolutionMarch,
+};
 
 struct Fixture
 {
@@ -112,10 +121,31 @@ int RampOpacityLevel(UINT lowResRow, bool zigzag)
     return kRampStart + kRampStep * static_cast<int>(lowResRow) + (zigzag && lowResRow % 2 ? kZigzag : 0);
 }
 
-float InterpolatedRampTransmittance(UINT y, UINT scale)
+int FilteredOpacityLevel(UINT lowResRow)
+{
+    return kFilteredRampStart + kFilteredRampStep * static_cast<int>(lowResRow);
+}
+
+template <typename OpacityLevelOfRow>
+float InterpolatedTransmittance(UINT y, UINT scale, OpacityLevelOfRow level)
 {
     const float lowResRow = (y - static_cast<float>(scale / 2)) / scale;
-    return 1.0f - (kRampStart + kRampStep * lowResRow) / 255.0f;
+    const UINT firstRow = static_cast<UINT>(lowResRow);
+    const float fraction = lowResRow - firstRow;
+    return 1.0f - (level(firstRow) * (1.0f - fraction) + level(firstRow + 1) * fraction) / 255.0f;
+}
+
+float ExpectedTransmittance(Upsampled upsampled, UINT scale, bool zigzag)
+{
+    switch (upsampled)
+    {
+    case Upsampled::CurrentMarch:
+        return InterpolatedTransmittance(kProbeY, scale, [zigzag](UINT row) { return RampOpacityLevel(row, zigzag); });
+    case Upsampled::FilteredFog:
+        return InterpolatedTransmittance(kProbeY, scale, FilteredOpacityLevel);
+    default:
+        return MarchedTransmittance(kProbeX, kProbeY);
+    }
 }
 
 bool FillGround(Fixture& fixture)
@@ -168,8 +198,8 @@ bool FillLight(Fixture& fixture, float viewZ)
     return SUCCEEDED(fixture.lights->UnlockRect(0));
 }
 
-bool ProbeTransmittance(Fixture& fixture, UINT scale, int quality, int lightCount, bool litShader,
-                        float& transmittance)
+bool ProbeTransmittance(Fixture& fixture, UINT scale, int quality, int lightCount, bool layerNoise,
+                        bool litShader, float& transmittance)
 {
     IDirect3DDevice9* device = fixture.device;
     const D3DVIEWPORT9 viewport = {0, 0, kWidth, kHeight, 0, 1};
@@ -228,6 +258,7 @@ bool ProbeTransmittance(Fixture& fixture, UINT scale, int quality, int lightCoun
     constants[14][3] = 1;
     constants[16][3] = 1;
     constants[17][2] = kMaxFogDistance;
+    constants[kFirstLayerNoiseFadeRegister][3] = layerNoise ? 1.0f : 0.0f;
     constants[53][0] = static_cast<float>(lightCount);
     constants[96][0] = 1;
     constants[96][2] = static_cast<float>(kTransmittanceView);
@@ -261,22 +292,28 @@ void CheckGrazingGroundUpsample(IDirect3DDevice9* device)
         bool zigzag;
         int lightCount;
         float lightViewZ;
-        bool interpolated;
+        bool layerNoise;
+        Upsampled upsampled;
     };
     const Scene scenes[] = {
         {"the current march's linear ramp is interpolated, not the filtered history or a new march", false, 0, 0.0f,
-         true},
-        {"a light beyond the ground leaves the interpolation", false, 1, 300.0f, true},
-        {"a current march curving between the taps keeps the full-resolution march", true, 0, 0.0f, false},
-        {"a light crossing the view ray keeps the full-resolution march", false, 1, 60.0f, false},
+         false, Upsampled::CurrentMarch},
+        {"a light beyond the ground leaves the interpolation", false, 1, 300.0f, false, Upsampled::CurrentMarch},
+        {"a current march curving between the taps keeps the full-resolution march", true, 0, 0.0f, false,
+         Upsampled::FullResolutionMarch},
+        {"a light crossing the view ray keeps the full-resolution march", false, 1, 60.0f, false,
+         Upsampled::FullResolutionMarch},
+        {"storm noise interpolates the filtered fog where a light crosses the view ray", false, 1, 60.0f, true,
+         Upsampled::FilteredFog},
+        {"storm noise interpolates the filtered fog where the current march curves", true, 1, 300.0f, true,
+         Upsampled::FilteredFog},
     };
     for (UINT scale : {2u, 4u})
         for (const Scene& scene : scenes)
         {
-            const float expected = scene.interpolated ? InterpolatedRampTransmittance(kProbeY, scale)
-                                                      : MarchedTransmittance(kProbeX, kProbeY);
+            const float expected = ExpectedTransmittance(scene.upsampled, scale, scene.zigzag);
             bool passed =
-                FillLowResolution(device, scale, fixture.filteredFog, [](UINT) { return kFilteredOpacityLevel; }) &&
+                FillLowResolution(device, scale, fixture.filteredFog, FilteredOpacityLevel) &&
                 FillLowResolution(device, scale, fixture.currentMarch,
                                   [&scene](UINT row) { return RampOpacityLevel(row, scene.zigzag); }) &&
                 FillLight(fixture, scene.lightViewZ);
@@ -287,8 +324,8 @@ void CheckGrazingGroundUpsample(IDirect3DDevice9* device)
                     if (scene.lightCount > 0 && !litShader)
                         continue;
                     float transmittance = 0.0f;
-                    passed = passed &&
-                             ProbeTransmittance(fixture, scale, quality, scene.lightCount, litShader, transmittance);
+                    passed = passed && ProbeTransmittance(fixture, scale, quality, scene.lightCount,
+                                                          scene.layerNoise, litShader, transmittance);
                     worst = std::fmax(worst, std::fabs(transmittance - expected));
                 }
             char label[192];
