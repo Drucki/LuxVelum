@@ -78,25 +78,28 @@ the lights whose sphere meets the view frustum, at any distance, by their irradi
 sphere lies wholly outside the view takes no slot. A light behind or beside the camera still competes while its sphere
 reaches into the view, which a sphere of up to 200 yd does from as far away. A candidate is the light already known when
 it has the same node address within 2 yd, so a colour or attenuation that animates between captures stays one light. A
-free slot goes at once to the challenger that evicted its last holder, otherwise to the visible candidate with the
-highest smoothed priority (0.3 s). A light that takes a slot fades in from 0 over 1 s, except in the first capture after
-a reset (map change, start, a gap of more than 1 s), whose lights shine at once. An occupied slot changes hands only
-when a candidate's smoothed priority exceeds 1.5 times that of the weakest slot for three captures in a row, one swap at
-a time, and a light that leaves the client's table, is evicted, dims to nothing or is crowded out of the candidate pool
-fades out over 1 s instead of vanishing, and no slot changes hands while one is still fading out. A light that has faded
-keeps its smoothed priority while it is still captured inside the view and fades back in if it wins a slot again; the
-slot it lost goes to its challenger, so the challenger is not undercut by its momentary rank. A slotted light whose last
-captured sphere lies more than 5 yd outside the view is forgotten at once, freeing its slot the same step, and re-enters
-as a new light; one that only jitters across the view's edge, or moves out of the view while its last captured position
-still meets it, dims over 1 s and ramps back if it returns within that time, so a sphere on the edge does not hand its
-slot back and forth. A capture that walked nothing (damaged table, table changed, read fault) keeps the previous set for
-up to eight captures. The stabiliser steps once per captured world frame; when the frame inputs are read a second time
-in the same frame (the early composite and the whole-frame pass can both read them) the stabilised set is replayed, so
-hysteresis and holds count frames. There is no camera-distance bound: a light stays while its sphere meets the view and
-the client keeps it in the table, which the client's own doodad loading bounds; the march evaluates a far light's
-scattering only on the steps where the ray crosses its sphere. `LightStay` keeps the client from disabling a
-light whose model is not drawn (see World lights), which otherwise also ends its fog glow the moment the source leaves
-the frame.
+free slot goes first to a challenger that evicted its holder, otherwise to the visible candidate with the highest
+smoothed priority (0.3 s). A light that takes a slot fades in over 1 s along a smoothstep curve, so neither end of the
+fade jumps. It shines at once in the first capture after a reset (map change, start, a gap of more than 1 s) and when
+it enters the candidates with its centre outside the view, its sphere reaching in from the edge as when the camera
+turns back toward it. An occupied slot changes hands only when a candidate's smoothed priority exceeds 1.5 times that
+of the weakest slot for three captures in a row, and a light that leaves the client's table, is evicted, dims to
+nothing or is crowded out of the candidate pool fades out over 1 s along the same curve instead of vanishing. The
+evicted light fades out before its challenger takes the slot and fades in; swaps run side by side while every slot
+that is fading out has a challenger waiting for it, so a light that left holds back further swaps until its slot is
+free. A light that has faded keeps its smoothed priority while it is still captured inside the view and fades back in if
+it wins a slot again; the slot it lost goes to its challenger, so the challenger is not undercut by its momentary rank.
+A slotted light whose last captured sphere lies more than 5 yd outside the view is forgotten at once, freeing its slot
+the same step, and re-enters as a new light; one that only jitters across the view's edge, or moves out of the view
+while its last captured position still meets it, dims over 1 s and ramps back if it returns within that time, so a
+sphere on the edge does not hand its slot back and forth. A capture that walked nothing (damaged table, table changed,
+read fault) keeps the previous set for up to eight captures. The stabiliser steps once per captured world frame; when
+the frame inputs are read a second time in the same frame (the early composite and the whole-frame pass can both read
+them) the stabilised set is replayed, so hysteresis and holds count frames. There is no camera-distance bound: a light
+stays while its sphere meets the view and the client keeps it in the table, which the client's own doodad loading
+bounds; the march evaluates a far light's scattering only on the steps where the ray crosses its sphere. `LightStay`
+keeps the client from disabling a light whose model is not drawn (see World lights), which otherwise also ends its fog
+glow the moment the source leaves the frame.
 
 Fog renders once after the world, including its late geometry and the native sun/moon glare, and before screen
 effects and the UI. While it draws, the stock fog is pushed out of range for the world render and restored

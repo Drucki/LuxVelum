@@ -41,6 +41,7 @@ private:
         bool slotted = false;
         bool evicted = false;
         bool heirToEvictedSlot = false;
+        bool enteredAtViewEdge = false;
         bool present = false;
         bool outOfView = false;
     };

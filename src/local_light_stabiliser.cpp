@@ -25,6 +25,16 @@ double Smoothed(double previous, double current, float dt)
     return previous + (current - previous) * alpha;
 }
 
+bool CentreInView(const LocalPointLight& light, const LocalLightCamera& camera)
+{
+    return PointLightMeetsView(light, camera, -light.cutoff);
+}
+
+float EasedFade(float weight)
+{
+    return weight * weight * (3.0f - 2.0f * weight);
+}
+
 bool StructuralFailure(const LocalLightInputs& lights)
 {
     return lights.candidateCount == 0 && (lights.capture == LocalLightCapture::DamagedTable ||
@@ -139,6 +149,7 @@ void LocalLightStabiliser::MatchCandidates(const LocalLightCamera& camera, const
     {
         m_entries[i].present = false;
         m_entries[i].outOfView = false;
+        m_entries[i].enteredAtViewEdge = false;
     }
     const uint32_t count = std::min(lights.candidateCount, kLocalLightCandidatePool);
     for (uint32_t i = 0; i < count; ++i)
@@ -150,9 +161,12 @@ void LocalLightStabiliser::MatchCandidates(const LocalLightCamera& camera, const
         if (!entry && !inView)
             continue;
         if (!entry)
+        {
             entry = AddEntry(candidate, priority);
-        if (!entry)
-            continue;
+            if (!entry)
+                continue;
+            entry->enteredAtViewEdge = !CentreInView(candidate, camera);
+        }
         entry->light = candidate;
         entry->priority = priority;
         entry->smoothedPriority = Smoothed(entry->smoothedPriority, priority, dt);
@@ -204,7 +218,7 @@ void LocalLightStabiliser::FillFreeSlots()
         best->slotted = true;
         best->evicted = false;
         best->heirToEvictedSlot = false;
-        best->weight = m_sceneStarting ? 1.0f : 0.0f;
+        best->weight = m_sceneStarting || best->enteredAtViewEdge ? 1.0f : 0.0f;
         best->challengeCaptures = 0;
         ++slotted;
         ++m_activity.admissions;
@@ -213,22 +227,26 @@ void LocalLightStabiliser::FillFreeSlots()
 
 void LocalLightStabiliser::ChallengeWeakestSlot()
 {
+    uint32_t vacating = 0;
+    uint32_t waitingHeirs = 0;
     Entry* weakest = nullptr;
     for (uint32_t i = 0; i < m_count; ++i)
     {
         Entry& entry = m_entries[i];
         if (entry.slotted && (entry.evicted || !entry.present))
-            return;
-        if (entry.slotted && (!weakest || entry.smoothedPriority < weakest->smoothedPriority))
+            ++vacating;
+        else if (entry.slotted && (!weakest || entry.smoothedPriority < weakest->smoothedPriority))
             weakest = &entry;
+        if (!entry.slotted && entry.present && entry.heirToEvictedSlot)
+            ++waitingHeirs;
     }
-    if (!weakest)
+    if (!weakest || vacating > waitingHeirs)
         return;
     Entry* challenger = nullptr;
     for (uint32_t i = 0; i < m_count; ++i)
     {
         Entry& entry = m_entries[i];
-        if (entry.slotted || !entry.present)
+        if (entry.slotted || !entry.present || entry.heirToEvictedSlot)
             continue;
         if (entry.smoothedPriority > kLocalLightSwapMargin * weakest->smoothedPriority)
             ++entry.challengeCaptures;
@@ -287,8 +305,9 @@ void LocalLightStabiliser::WriteOutput(LocalLightInputs& lights)
     {
         const Entry& entry = m_entries[order[i]];
         LocalPointLight light = entry.light;
+        const float fade = EasedFade(entry.weight);
         for (int channel = 0; channel < 3; ++channel)
-            light.uploadedColor[channel] *= entry.weight;
+            light.uploadedColor[channel] *= fade;
         lights.pointLights[i] = light;
     }
     lights.pointLightCount = count;
