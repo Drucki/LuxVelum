@@ -283,7 +283,7 @@ bool WaterFftPasses::EnsureAtlas(IDirect3DDevice9* dev, int slots)
 bool WaterFftPasses::EnsureMapScratch()
 {
     for (IDirect3DTexture9*& scratch : m_mapScratch)
-        if (!scratch && !CreateMap(&scratch))
+        if (!scratch && !CreateSurfaceMap(&scratch))
             return Fail("wave map scratch creation failed");
     return true;
 }
@@ -311,11 +311,18 @@ bool WaterFftPasses::Prepare(IDirect3DDevice9* dev, int resolution, int slots)
            EnsureMapScratch();
 }
 
-bool WaterFftPasses::CreateMap(IDirect3DTexture9** map) const
+bool WaterFftPasses::CreateSurfaceMap(IDirect3DTexture9** surface) const
 {
     const UINT side = static_cast<UINT>(m_resolution);
     return m_device && m_resolution > 0 &&
-           CreateTarget(m_device, side, side, static_cast<UINT>(WaterFftStages(m_resolution) + 1), kMapFormat, map);
+           CreateTarget(m_device, side, side, static_cast<UINT>(WaterFftStages(m_resolution) + 1), kMapFormat,
+                        surface);
+}
+
+bool WaterFftPasses::CreateFoamMap(IDirect3DTexture9** foam) const
+{
+    const UINT side = static_cast<UINT>(m_resolution);
+    return m_device && m_resolution > 0 && CreateTarget(m_device, side, side, 1, kMapFormat, foam);
 }
 
 void WaterFftPasses::Begin(IDirect3DDevice9* dev)
@@ -413,14 +420,10 @@ void WaterFftPasses::Draw()
 
 void WaterFftPasses::ClearFoam(IDirect3DTexture9* foam)
 {
-    const UINT levels = foam->GetLevelCount();
-    for (UINT level = 0; level < levels; ++level)
-    {
-        const UINT side = std::max(static_cast<UINT>(m_resolution) >> level, 1u);
-        BindTargets(foam, nullptr, level);
-        SetViewport(0, side, side);
-        m_passDevice->Clear(0, nullptr, D3DCLEAR_TARGET, 0, 1.0f, 0);
-    }
+    const UINT side = static_cast<UINT>(m_resolution);
+    BindTargets(foam, nullptr, 0);
+    SetViewport(0, side, side);
+    m_passDevice->Clear(0, nullptr, D3DCLEAR_TARGET, 0, 1.0f, 0);
 }
 
 void WaterFftPasses::Evolve(int slot, const WaterFftTile& tile, const WaterFftSettings& settings, double seconds)
@@ -515,7 +518,6 @@ void WaterFftPasses::UpdatePairedMaps(IDirect3DTexture9* surface, IDirect3DTextu
     for (UINT level = 1; level <= stages; ++level)
         ResampleLevel(PassShader::MipPair, m_mapScratch[(level - 1) % 2], level - 1, surface, m_mapScratch[level % 2],
                       level);
-    BuildMipChain(nextFoam);
 }
 
 void WaterFftPasses::UpdateSeparateMaps(IDirect3DTexture9* surface, IDirect3DTexture9* nextFoam)
@@ -529,25 +531,11 @@ void WaterFftPasses::UpdateSeparateMaps(IDirect3DTexture9* surface, IDirect3DTex
     SetViewport(0, side, side);
     UseShader(PassShader::Foam);
     Draw();
-    BuildMipChain(surface);
-    BuildMipChain(nextFoam);
-}
-
-void WaterFftPasses::BuildMipChain(IDirect3DTexture9* map)
-{
     const UINT stages = static_cast<UINT>(WaterFftStages(m_resolution));
-    if (m_pairTargets)
-    {
-        ResampleLevel(PassShader::Mip, map, 0, m_mapScratch[0], nullptr, 0);
-        for (UINT level = 1; level <= stages; ++level)
-            ResampleLevel(PassShader::MipPair, m_mapScratch[(level - 1) % 2], level - 1, map, m_mapScratch[level % 2],
-                          level);
-        return;
-    }
     for (UINT level = 1; level <= stages; ++level)
     {
-        ResampleLevel(PassShader::Mip, map, level - 1, m_mapScratch[0], nullptr, level);
-        ResampleLevel(PassShader::Mip, m_mapScratch[0], level, map, nullptr, level);
+        ResampleLevel(PassShader::Mip, surface, level - 1, m_mapScratch[0], nullptr, level);
+        ResampleLevel(PassShader::Mip, m_mapScratch[0], level, surface, nullptr, level);
     }
 }
 
@@ -630,8 +618,8 @@ bool WaterFft::EnsureTileMaps(TileMaps& maps, bool& created)
     if (maps.surface && maps.foam[0] && maps.foam[1])
         return true;
     ReleaseTileMaps(maps);
-    if (!m_passes.CreateMap(&maps.surface) || !m_passes.CreateMap(&maps.foam[0]) ||
-        !m_passes.CreateMap(&maps.foam[1]))
+    if (!m_passes.CreateSurfaceMap(&maps.surface) || !m_passes.CreateFoamMap(&maps.foam[0]) ||
+        !m_passes.CreateFoamMap(&maps.foam[1]))
     {
         ReleaseTileMaps(maps);
         return false;

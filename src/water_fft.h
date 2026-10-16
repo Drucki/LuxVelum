@@ -27,7 +27,8 @@ public:
     void ReleaseAll();
 
     bool Prepare(IDirect3DDevice9* dev, int resolution, int slots);
-    bool CreateMap(IDirect3DTexture9** map) const;
+    bool CreateSurfaceMap(IDirect3DTexture9** surface) const;
+    bool CreateFoamMap(IDirect3DTexture9** foam) const;
 
     void Begin(IDirect3DDevice9* dev);
     void ClearFoam(IDirect3DTexture9* foam);
@@ -85,7 +86,6 @@ private:
     void Draw();
     void UpdatePairedMaps(IDirect3DTexture9* surface, IDirect3DTexture9* nextFoam);
     void UpdateSeparateMaps(IDirect3DTexture9* surface, IDirect3DTexture9* nextFoam);
-    void BuildMipChain(IDirect3DTexture9* map);
     void ResampleLevel(PassShader shader, IDirect3DTexture9* source, UINT sourceLevel, IDirect3DTexture9* target,
                        IDirect3DTexture9* pairedTarget, UINT level);
 

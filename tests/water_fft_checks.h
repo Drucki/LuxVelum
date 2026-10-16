@@ -700,8 +700,8 @@ void CheckGpuSingleMode(IDirect3DDevice9* dev)
     WaterFftPasses passes;
     IDirect3DTexture9* surface = nullptr;
     IDirect3DTexture9* foam[2] = {};
-    bool ran = passes.Prepare(dev, n, 1) && passes.CreateMap(&surface) && passes.CreateMap(&foam[0]) &&
-               passes.CreateMap(&foam[1]);
+    bool ran = passes.Prepare(dev, n, 1) && passes.CreateSurfaceMap(&surface) && passes.CreateFoamMap(&foam[0]) &&
+               passes.CreateFoamMap(&foam[1]);
     std::vector<float> texels(static_cast<size_t>(passes.Slots()) * n * n * 4);
     texels[(static_cast<size_t>(n / 2) * passes.Slots() * n + n / 2 + kSingleModeCycles) * 4] =
         static_cast<float>(SingleModeSpectrumValue());
@@ -874,61 +874,6 @@ double HalfStorageError(double actual, double expected)
     return std::fabs(actual - expected) / (kHalfRelativeTolerance * std::fabs(expected) + kSmallestHalfStep);
 }
 
-double RawChannel(const double* texel, int channel)
-{
-    return texel[channel];
-}
-
-struct MipChainErrors
-{
-    bool read = true;
-    double level = 0.0;
-    double chainEnd = 0.0;
-};
-
-void AccumulateMipChainErrors(IDirect3DDevice9* dev, IDirect3DTexture9* map, int resolution, int channels,
-                              double (*channelOf)(const double*, int), MipChainErrors& errors)
-{
-    const UINT levels = map ? map->GetLevelCount() : 0;
-    bool read = levels == static_cast<UINT>(WaterFftStages(resolution) + 1);
-    Readback finer;
-    read = read && ReadLevel(dev, map, 0, finer);
-    double channelScale[4] = {};
-    double mean[4] = {};
-    for (UINT y = 0; read && y < finer.height; ++y)
-        for (UINT x = 0; x < finer.width; ++x)
-            for (int channel = 0; channel < channels; ++channel)
-            {
-                const double value = channelOf(finer.At(x, y), channel);
-                channelScale[channel] = std::max(channelScale[channel], std::fabs(value));
-                mean[channel] += value / (static_cast<double>(finer.width) * finer.height);
-            }
-    for (UINT level = 1; read && level < levels; ++level)
-    {
-        Readback coarser;
-        read = ReadLevel(dev, map, level, coarser) && coarser.width * 2 == finer.width;
-        for (UINT y = 0; read && y < coarser.height; ++y)
-            for (UINT x = 0; x < coarser.width; ++x)
-                for (int channel = 0; channel < channels; ++channel)
-                {
-                    const double box = 0.25 * (channelOf(finer.At(2 * x, 2 * y), channel) +
-                                               channelOf(finer.At(2 * x + 1, 2 * y), channel) +
-                                               channelOf(finer.At(2 * x, 2 * y + 1), channel) +
-                                               channelOf(finer.At(2 * x + 1, 2 * y + 1), channel));
-                    errors.level =
-                        std::max(errors.level, HalfStorageError(channelOf(coarser.At(x, y), channel), box));
-                }
-        if (read && coarser.width == 1)
-            for (int channel = 0; channel < channels; ++channel)
-            {
-                const double deviation = std::fabs(channelOf(coarser.At(0, 0), channel) - mean[channel]);
-                errors.chainEnd = std::max(errors.chainEnd, deviation / std::max(channelScale[channel], 1.0e-6));
-            }
-        finer = coarser;
-    }
-    errors.read = errors.read && read;
-}
-
 void CheckSimulatedMapsMatchReference(IDirect3DDevice9* dev)
 {
     const int n = kWaterFftLowResolution;
@@ -990,22 +935,50 @@ void CheckSimulatedMapsMatchReference(IDirect3DDevice9* dev)
     Check(ran && foamError <= kFoamStateTolerance,
           "water foam and oxygen maps take one explicit Euler step of the Jacobian-driven ODE");
 
-    MipChainErrors surfaceMips;
-    MipChainErrors foamMips;
-    surfaceMips.read = foamMips.read = ran;
-    for (size_t tile = 0; ran && tile < tiles.size(); ++tile)
+    double levelError = 0.0;
+    double chainEnd = 0.0;
+    bool mipsRead = ran;
+    for (size_t tile = 0; mipsRead && tile < tiles.size(); ++tile)
     {
-        AccumulateMipChainErrors(dev, fft.Surface(static_cast<int>(tile)), n, 4, RawChannel, surfaceMips);
-        AccumulateMipChainErrors(dev, fft.Foam(static_cast<int>(tile)), n, 2, FoamState, foamMips);
+        IDirect3DTexture9* surface = fft.Surface(static_cast<int>(tile));
+        const UINT levels = surface ? surface->GetLevelCount() : 0;
+        mipsRead = levels == static_cast<UINT>(WaterFftStages(n) + 1);
+        Readback finer;
+        mipsRead = mipsRead && ReadLevel(dev, surface, 0, finer);
+        double channelScale[4] = {};
+        double mean[4] = {};
+        for (UINT y = 0; mipsRead && y < finer.height; ++y)
+            for (UINT x = 0; x < finer.width; ++x)
+                for (int channel = 0; channel < 4; ++channel)
+                {
+                    channelScale[channel] = std::max(channelScale[channel], std::fabs(finer.At(x, y)[channel]));
+                    mean[channel] += finer.At(x, y)[channel] / (static_cast<double>(finer.width) * finer.height);
+                }
+        for (UINT level = 1; mipsRead && level < levels; ++level)
+        {
+            Readback coarser;
+            mipsRead = ReadLevel(dev, surface, level, coarser) && coarser.width * 2 == finer.width;
+            for (UINT y = 0; mipsRead && y < coarser.height; ++y)
+                for (UINT x = 0; x < coarser.width; ++x)
+                    for (int channel = 0; channel < 4; ++channel)
+                    {
+                        const double box = 0.25 * (finer.At(2 * x, 2 * y)[channel] +
+                                                   finer.At(2 * x + 1, 2 * y)[channel] +
+                                                   finer.At(2 * x, 2 * y + 1)[channel] +
+                                                   finer.At(2 * x + 1, 2 * y + 1)[channel]);
+                        levelError = std::max(levelError, HalfStorageError(coarser.At(x, y)[channel], box));
+                    }
+            if (mipsRead && coarser.width == 1)
+                for (int channel = 0; channel < 4; ++channel)
+                    chainEnd = std::max(chainEnd, std::fabs(coarser.At(0, 0)[channel] - mean[channel]) /
+                                                      std::max(channelScale[channel], 1.0e-6));
+            finer = coarser;
+        }
     }
-    std::printf("     surface mips: box-average error %.3f of fp16 tolerance, 1x1 level vs level-0 mean %.2e; foam "
-                "mips: %.3f, %.2e\n",
-                surfaceMips.level, surfaceMips.chainEnd, foamMips.level, foamMips.chainEnd);
-    Check(surfaceMips.read && surfaceMips.level <= 1.0 && surfaceMips.chainEnd <= kChainEndTolerance,
+    std::printf("     surface mips: box-average error %.3f of fp16 tolerance, 1x1 level vs level-0 mean %.2e\n",
+                levelError, chainEnd);
+    Check(mipsRead && levelError <= 1.0 && chainEnd <= kChainEndTolerance,
           "water surface map carries a full mip chain where each level is the 2x2 box average of the one above");
-    Check(foamMips.read && foamMips.level <= 1.0 && foamMips.chainEnd <= kChainEndTolerance,
-          "water foam map carries the same mip chain, so distant water at a grazing angle samples averaged foam "
-          "instead of aliasing level 0 into row streaks");
 }
 
 bool SameBits(const Readback& a, const Readback& b)
@@ -1235,13 +1208,12 @@ void CheckResolutionsAndRecreation(IDirect3DDevice9* dev)
     const bool high =
         SimulateFrame(dev, fft, SettingsFor(kWaterFftHighResolution), tiles, every, kSimulatedSeconds, kFrameSeconds);
     const bool highMaps = high && LevelWidth(fft.Surface(0)) == 256 && fft.Surface(0)->GetLevelCount() == 9 &&
-                          LevelWidth(fft.Foam(2)) == 256 && fft.Foam(2)->GetLevelCount() == 9;
+                          LevelWidth(fft.Foam(2)) == 256;
     const bool low =
         SimulateFrame(dev, fft, SettingsFor(kWaterFftLowResolution), tiles, every, kSimulatedSeconds, kFrameSeconds);
     const bool lowMaps = low && LevelWidth(fft.Surface(0)) == 128 && fft.Surface(0)->GetLevelCount() == 8 &&
-                         LevelWidth(fft.Foam(2)) == 128 && fft.Foam(2)->GetLevelCount() == 8;
-    Check(highMaps && lowMaps,
-          "water surface and foam maps follow the resolution setting (256 with 9 mips, 128 with 8)");
+                         LevelWidth(fft.Foam(2)) == 128;
+    Check(highMaps && lowMaps, "water maps follow the resolution setting (256 with 9 mips, 128 with 8)");
 
     WaterFft fresh;
     TileReadback restarted;
@@ -1550,15 +1522,13 @@ FramePlan PlanFrame(int resolution, int tiles, bool pairedTargets)
     const unsigned transformPasses = 2 * ((stages + 1) / 2);
     const DWORD area = static_cast<DWORD>(resolution) * resolution;
     const unsigned passesPerLevel = pairedTargets ? 1u : 2u;
-    const unsigned foamSeedCopies = pairedTargets ? 1u : 0u;
-    const unsigned mipChains = 2;
     FramePlan plan = {};
-    plan.draws = tiles * (1 + 2 + foamSeedCopies + mipChains * stages * passesPerLevel) + transformPasses;
-    plan.pixels = (1 + transformPasses + 2 + foamSeedCopies) * tiles * area;
+    plan.draws = tiles * (1 + 2 + stages * passesPerLevel) + transformPasses;
+    plan.pixels = (1 + transformPasses + 2) * tiles * area;
     for (unsigned level = 1; level <= stages; ++level)
     {
         const DWORD side = static_cast<DWORD>(resolution) >> level;
-        plan.pixels += mipChains * passesPerLevel * tiles * side * side;
+        plan.pixels += passesPerLevel * tiles * side * side;
     }
     return plan;
 }
