@@ -580,10 +580,11 @@ and a `BUILD.txt` identifying the commit and validation. Artifacts are kept for 
 rebuild an expired download. Pull-request artifacts are builds of GitHub's proposed merge revision.
 
 On a push to `st0ny-dev` and on manual runs a second job publishes the same files as a GitHub release `build-<run>` with
-the asset `CoAVolFog-Win32.zip`, which needs no login to download; the newest `st0ny-dev` build is always at
-`releases/latest/download/CoAVolFog-Win32.zip`, and a run from another `st0ny-*` branch is marked as a pre-release so it
-does not become the latest one. A build whose branch has already moved on to a newer commit gets no release, and pull
-requests publish none.
+the asset `CoAVolFog-Win32.zip`, which needs no login to download, and then deletes every other release with its tag,
+so the fork keeps only the newest build. The newest `st0ny-dev` build is at
+`releases/latest/download/CoAVolFog-Win32.zip`; a run from another `st0ny-*` branch is marked as a pre-release, which
+GitHub never counts as the latest, so while one is the newest release that link finds nothing. A build whose branch
+has already moved on to a newer commit gets no release and deletes nothing, and pull requests publish none.
 
 CI uses Windows Server 2022, MSVC 2022 and `fxc` to build Win32 Release, then runs the comment check and the CPU
 harness. The CPU harness exercises the existing data, fog model, local-light/interior, settings persistence,

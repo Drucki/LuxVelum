@@ -101,6 +101,7 @@ jobs:
           zip -r ../CoAVolFog-Win32.zip .
 
       - name: Create or refresh the release
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.ref_name }}
@@ -134,3 +135,20 @@ jobs:
             gh release create "$tag" CoAVolFog-Win32.zip --repo "$GITHUB_REPOSITORY" \
               --target "$SHA" --title "$title" --notes-file notes.md "${prerelease[@]}"
           fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Delete every older release
+        if: ${{ steps.publish.outputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.publish.outputs.tag }}
+        run: |
+          if ! older=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[].tag_name'); then
+            echo "::warning::the releases could not be listed, so the older ones stay"
+            exit 0
+          fi
+          for old in $older; do
+            [ "$old" = "$TAG" ] && continue
+            gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes ||
+              echo "::warning::the older release ${old} could not be deleted"
+          done
