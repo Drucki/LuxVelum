@@ -8,6 +8,23 @@ ray-marching fog renderer and a water renderer. Fog layers come from the Classic
 elsewhere (Outland, Northrend, custom maps). Water is shaded like WoW Forever's PBR water, from its liquid presets,
 wave spectra and foam textures.
 
+## About this fork
+
+This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), branch `st0ny-dev`) builds on
+[jealous-sound/coa-vfog](https://github.com/jealous-sound/coa-vfog) and fixes fog lights that flickered or went out:
+
+- **LightStay** (`LightStay=1`, on by default) keeps the client from switching off a light whose model was not drawn,
+  the same byte as patch No. 70 "lightstay" of St0ny's AIO WoW EXE Patcher.
+- **Steady light slots**: the eight fog light slots are held with hysteresis instead of being re-ranked every frame,
+  and a jittering table read no longer drops the whole capture.
+- **Lights in view**: a light stays on at any distance while its sphere meets the view frustum, instead of a fixed
+  distance limit.
+- **Smooth swaps**: lights fade in and out over about a second when they take or give up a slot; a light entering
+  from the edge of the view shines at once.
+- **Storm fog over water**: no more bright lines on grazing water in noisy fog near point lights.
+- **Releases**: every push to `st0ny-dev` builds the install zip and keeps only the newest build:
+  [CoAVolFog-Win32.zip](https://github.com/Raz0r1337/coa-vfog/releases/latest/download/CoAVolFog-Win32.zip).
+
 ## What it draws
 
 - **Distance haze** that thickens toward the horizon and fades with altitude, tinted by the zone's
