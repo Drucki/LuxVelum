@@ -2,7 +2,7 @@ name: Windows release build
 
 on:
   push:
-    branches: [main, st0ny-dev]
+    branches: [main, st0ny-dev, st0ny-main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -82,8 +82,8 @@ jobs:
     name: Publish the install archive as a release
     needs: build
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/st0ny-'))
+      github.ref == 'refs/heads/st0ny-main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -117,8 +117,6 @@ jobs:
             exit 0
           fi
           title="${BRANCH} build ${RUN_NUMBER} (${short})"
-          prerelease=()
-          [ "$BRANCH" = "st0ny-dev" ] || prerelease=(--prerelease)
           {
             echo "Win32 Release build of \`${BRANCH}\` at ${short}."
             echo
@@ -133,7 +131,7 @@ jobs:
             gh release upload "$tag" CoAVolFog-Win32.zip --clobber --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$tag" CoAVolFog-Win32.zip --repo "$GITHUB_REPOSITORY" \
-              --target "$SHA" --title "$title" --notes-file notes.md "${prerelease[@]}"
+              --target "$SHA" --title "$title" --notes-file notes.md
           fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 

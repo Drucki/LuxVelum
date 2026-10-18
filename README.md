@@ -10,7 +10,8 @@ wave spectra and foam textures.
 
 ## About this fork
 
-This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), branch `st0ny-dev`) builds on
+This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), development on `st0ny-dev`, releases from
+`st0ny-main`) builds on
 [jealous-sound/coa-vfog](https://github.com/jealous-sound/coa-vfog) and fixes fog lights that flickered or went out:
 
 - **LightStay** (`LightStay=1`, on by default) keeps the client from switching off a light whose model was not drawn,
@@ -22,7 +23,7 @@ This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), branch `
 - **Smooth swaps**: lights fade in and out over about a second when they take or give up a slot; a light entering
   from the edge of the view shines at once.
 - **Storm fog over water**: no more bright lines on grazing water in noisy fog near point lights.
-- **Releases**: every push to `st0ny-dev` builds the install zip and keeps only the newest build:
+- **Releases**: every push to `st0ny-main` publishes the install zip and keeps only the newest build:
   [CoAVolFog-Win32.zip](https://github.com/Raz0r1337/coa-vfog/releases/latest/download/CoAVolFog-Win32.zip).
 
 ## What it draws
@@ -596,12 +597,12 @@ ZIP containing `version.dll`, `CoAVolFog.dll`, `CoAVolFog.ini`, `fogdata.bin`, `
 and a `BUILD.txt` identifying the commit and validation. Artifacts are kept for 30 days; rerun the workflow to
 rebuild an expired download. Pull-request artifacts are builds of GitHub's proposed merge revision.
 
-On a push to `st0ny-dev` and on manual runs a second job publishes the same files as a GitHub release `build-<run>` with
-the asset `CoAVolFog-Win32.zip`, which needs no login to download, and then deletes every other release with its tag,
-so the fork keeps only the newest build. The newest `st0ny-dev` build is at
-`releases/latest/download/CoAVolFog-Win32.zip`; a run from another `st0ny-*` branch is marked as a pre-release, which
-GitHub never counts as the latest, so while one is the newest release that link finds nothing. A build whose branch
-has already moved on to a newer commit gets no release and deletes nothing, and pull requests publish none.
+Pushes to the development branch `st0ny-dev` are built and checked but publish nothing. On a push to the release
+branch `st0ny-main`, and on a manual run of that branch, a second job publishes the same files as a GitHub release
+`build-<run>` with the asset `CoAVolFog-Win32.zip`, which needs no login to download, and then deletes every other
+release with its tag, so the fork keeps only the newest build at `releases/latest/download/CoAVolFog-Win32.zip`. A
+build whose branch has already moved on to a newer commit gets no release and deletes nothing; other branches and
+pull requests publish none.
 
 CI uses Windows Server 2022, MSVC 2022 and `fxc` to build Win32 Release, then runs the comment check and the CPU
 harness. The CPU harness exercises the existing data, fog model, local-light/interior, settings persistence,
