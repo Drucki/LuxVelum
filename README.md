@@ -280,10 +280,11 @@ rates from fields 4–9. The water is tuned by eye against this mapping, not mat
   the game's multisampled back buffer and automatic depth (D24S8 for D24X8) instead, and `INTZ` becomes a copy.
 - **Hooks.** Five 5-byte call displacements: the world render call (`0x4FB03D`, stock-fog override and restore),
   after the opaque M2 pass (`0x4F911D`, captures camera inputs), the liquid surface pass (`0x4F9170`, forces
-  depth writes), world-name text (`0x7E5818`, suppresses depth writes), and before the frame effects
-  (`0x4F9281`, draws the fog over the completed world). The original bytes are checked first; on any mismatch
-  nothing is patched. Two more retarget the far-clip clamp calls (`0x780810`, `0x781444`) when `FarClipMax` is
-  set at start-up, independently of the fog hooks.
+  depth writes), world-name text (`0x7E5818`, draws the fog unless it already composited this frame, then
+  suppresses depth writes), and before the frame effects (`0x4F9281`, draws the fog over the completed world when
+  the world text did not). The original bytes are checked first; on any mismatch nothing is patched. Two more
+  retarget the far-clip clamp calls (`0x780810`, `0x781444`) when `FarClipMax` is set at start-up, independently of
+  the fog hooks.
 - **Transparent fog hooks.** The M2 batch fog call (`0x81FD15`) and the glare pass call (`0x4F9213`), installed
   after the fog hooks whatever `TransparentFog` says, and neither when a byte run checked under M2 batch fog, M2 fog
   setter or Native glare differs. The M2 thunk forwards to the client while nothing is armed and otherwise hands the
@@ -373,7 +374,11 @@ Engine notes behind the code:
   at `+8` selects world rendering (`0x6C5564`), which requests depth testing (Gx state 13, `0x6C5591`) and depth
   writes (Gx state 15, `0x6C55BE`, dispatched as `D3DRS_ZWRITEENABLE` at `0x6A8FC7`). Suppressing the writes
   keeps glyph quads out of the depth the fog is integrated against, where they would end fog rays at the text,
-  while keeping the draw and its depth test. The later name/icon path at `0x4FB042` is left in place.
+  while keeping the draw and its depth test. The text is drawn without depth writes after lightning, missile arcs and
+  the glare, so a fog composite after it fogs each glyph by the depth behind it: names in front of the sky took the
+  sky's full fog and vanished, while the same name in front of a nearby tree stayed visible. The thunk therefore draws
+  the fog first when it has not composited this frame, as the stock client leaves names unfogged, and the world-done
+  hook then skips it. The later name/icon path at `0x4FB042` is left in place.
 - Native glare. `0x4F9213` (`E8 58 76 2F 00`) calls the sun/moon glare pass `0x7F0870`, which is not patched.
   Its draw `0x9AC400` adds the `sunGlare`/`moonGlare` quads (`D3DBLEND_SRCALPHA`, `D3DBLEND_ONE`) at depth
   `[0.9990234375, 1]`, and its update `0x9AC3C0` runs a GPU occlusion query against the current world depth

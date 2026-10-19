@@ -85,6 +85,7 @@ extern "C" __declspec(dllimport) void __cdecl vf_test_hook_world_done();
 extern "C" __declspec(dllimport) void __cdecl vf_test_hook_m2_batch_fog(M2BatchFogArgs*);
 extern "C" __declspec(dllimport) const void* __cdecl vf_test_m2_batch_fog_thunk(uintptr_t);
 extern "C" __declspec(dllimport) const void* __cdecl vf_test_glare_pass_thunk(uintptr_t);
+extern "C" __declspec(dllimport) const void* __cdecl vf_test_world_text_draw_thunk(uintptr_t);
 extern "C" __declspec(dllimport) void __cdecl vf_test_log_transparent_fog_stats();
 extern "C" __declspec(dllimport) void __cdecl vf_test_clear_transparent_fog_failure();
 extern "C" __declspec(dllimport) void __cdecl vf_test_force_fog_params(const FogParams*);

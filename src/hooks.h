@@ -55,6 +55,7 @@ void LogTransparentFogStatsAtFrameEnd();
 void ClearTransparentFogFailure();
 const void* RetargetM2BatchFogThunk(uintptr_t target);
 const void* RetargetGlarePassThunk(uintptr_t target);
+const void* RetargetWorldTextDrawThunk(uintptr_t target);
 void UseTestWaterClient(const FrameInputs& in, const WaterInputs& water);
 unsigned TestWaterContactReads();
 void RefuseTestWaterContacts(bool refused);

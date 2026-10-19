@@ -666,6 +666,26 @@ enum class Backdrop
     FarWall,
 };
 
+struct WorldTextCapture
+{
+    IDirect3DDevice9* dev = nullptr;
+    Image image;
+    int draws = 0;
+};
+
+void __cdecl CaptureAtWorldText(void* batch)
+{
+    WorldTextCapture& capture = *static_cast<WorldTextCapture*>(batch);
+    capture.image = Capture(capture.dev);
+    ++capture.draws;
+}
+
+void CallWorldTextThunk(WorldTextCapture& capture)
+{
+    const void* thunk = vf_test_world_text_draw_thunk(reinterpret_cast<uintptr_t>(&CaptureAtWorldText));
+    reinterpret_cast<void(__cdecl*)(void*)>(thunk)(&capture);
+}
+
 struct FrameOptions
 {
     Backdrop backdrop = Backdrop::Scene;
@@ -679,6 +699,7 @@ struct FrameOptions
     bool readDepthAtLiquidEnd = false;
     const DepthTexel* depthTexels = nullptr;
     void (*drawOverBackdrop)(Harness& h) = nullptr;
+    WorldTextCapture* worldText = nullptr;
 };
 
 struct HookedFrame
@@ -780,6 +801,8 @@ HookedFrame RenderHookedFrame(Harness& h, const View& v, const Config& cfg, cons
     const int beforeOwnCall = g_glarePasses;
     CallGlarePassThunk();
     frame.glarePassesAtOwnCall = g_glarePasses - beforeOwnCall;
+    if (options.worldText)
+        CallWorldTextThunk(*options.worldText);
     if (options.keepStateAround)
         frame.stateKept = KeepsState(h, v, &vf_test_hook_world_done) && frame.stateKept;
     else
@@ -1139,6 +1162,26 @@ void CheckHookedFogRestoresState(Harness& h)
           "sampler, shader, constant, stream, viewport, scissor and target state");
 }
 
+void CheckFogDrawnBeforeWorldText(Harness& h)
+{
+    const View v;
+    const Config cfg = HookConfig(false);
+    const HookedFrame plain = RenderSettledHookedFrame(h, v, cfg, FrameOptions());
+    WorldTextCapture text;
+    text.dev = h.dev;
+    FrameOptions options;
+    options.worldText = &text;
+    const HookedFrame named = RenderSettledHookedFrame(h, v, cfg, options);
+    const int atText = LargestDifference(text.image, plain.image, v.world);
+    const int afterWorld = LargestDifference(named.image, plain.image, v.world);
+    std::printf("     world-name text drawn %d times; frame at the text vs a frame without text %d/255, final frame "
+                "%d/255\n",
+                text.draws, atText, afterWorld);
+    Check(text.draws == kWarmUpFrames && atText == 0 && afterWorld == 0,
+          "with TransparentFog=0 the fog is drawn once before the world-name text and not again after the world, "
+          "so names in front of the sky are not hidden by the sky's fog");
+}
+
 struct Fallback
 {
     const char* name;
@@ -1369,6 +1412,7 @@ void CheckTransparentFog(Harness& h)
     CheckGodRaysAfterTheWorld(h);
     CheckFittedColourCarriesThePointLights(h);
     CheckHookedFogRestoresState(h);
+    CheckFogDrawnBeforeWorldText(h);
     CheckWholeFrameFallbacks(h);
     CheckEarlyCompositeFailureLogged(h);
     CheckThunksAndGlarePass(h);

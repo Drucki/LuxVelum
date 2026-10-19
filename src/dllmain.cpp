@@ -377,6 +377,11 @@ extern "C" const void* __cdecl vf_test_glare_pass_thunk(uintptr_t target)
     return RetargetGlarePassThunk(target);
 }
 
+extern "C" const void* __cdecl vf_test_world_text_draw_thunk(uintptr_t target)
+{
+    return RetargetWorldTextDrawThunk(target);
+}
+
 extern "C" void __cdecl vf_test_log_transparent_fog_stats()
 {
     LogTransparentFogStatsAtFrameEnd();

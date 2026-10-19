@@ -61,6 +61,7 @@ StatusLog g_godRayLog;
 
 uintptr_t g_m2BatchFogTarget = engine::kM2BatchFogTarget;
 uintptr_t g_glarePassTarget = engine::kGlarePassTarget;
+uintptr_t g_worldTextDrawTarget = engine::kWorldTextDrawTarget;
 int g_m2BatchFogObserved = 0;
 bool g_transparentFogHooksInstalled = false;
 bool g_transparentFogFailed = false;
@@ -71,6 +72,7 @@ struct TransparentFogFrame
     bool inWorld;
     bool pastLiquid;
     bool composited;
+    bool drawnBeforeWorldText;
     bool armed;
     bool glareDrawn;
     StockFogFit fit;
@@ -568,11 +570,12 @@ void RecordFogAttempt(const FogAttempt& attempt)
     RecordFogFrame(attempt.rendered, attempt.cameraUnderLiquid, attempt.skip);
 }
 
-void RenderCurrentWorldFog(FogDevice* device)
+bool RenderCurrentWorldFog(FogDevice* device)
 {
     const FogAttempt attempt = RenderWorldFog(device, FogPass::WholeFrame);
     if (attempt.tried)
         RecordFogAttempt(attempt);
+    return attempt.tried;
 }
 
 void RenderGodRaysOverTheWorld(FogDevice* device)
@@ -751,11 +754,19 @@ void OnOpaqueDone()
     g_worldClient->captureOpaqueState(RealDevice(device));
 }
 
+void OnWorldTextBegin()
+{
+    if (g_failed || !g_transparentFog.inWorld || g_transparentFog.composited || g_transparentFog.drawnBeforeWorldText)
+        return;
+    ForeverLookBeforeEarlyFog();
+    g_transparentFog.drawnBeforeWorldText = RenderCurrentWorldFog(g_worldClient->device());
+}
+
 void OnWorldDone()
 {
     if (!g_failed && g_transparentFog.composited)
         RenderGodRaysOverTheWorld(g_worldClient->device());
-    else if (!g_failed)
+    else if (!g_failed && !g_transparentFog.drawnBeforeWorldText)
         RenderCurrentWorldFog(g_worldClient->device());
     DisarmTransparentFog();
     g_worldClient->endWorld();
@@ -1370,11 +1381,19 @@ static void __fastcall WaterMaterialRenderHook(void* material, void*, void* envi
 
 static void __cdecl WorldTextDrawThunk(void* batch)
 {
+    __try
+    {
+        OnWorldTextBegin();
+    }
+    __except (GuardFilter(GetExceptionCode(), "world text fog hook"))
+    {
+        g_failed = true;
+    }
     FogDevice* device = nullptr;
     __try
     {
         if (!g_failed && GlobalConfig().Get().enable)
-            device = GameFogDevice();
+            device = g_worldClient->device();
         SuppressDepthWrite(device, true);
     }
     __except (GuardFilter(GetExceptionCode(), "world text depth hook"))
@@ -1383,12 +1402,18 @@ static void __cdecl WorldTextDrawThunk(void* batch)
     }
     __try
     {
-        reinterpret_cast<void(__cdecl*)(void*)>(engine::kWorldTextDrawTarget)(batch);
+        reinterpret_cast<void(__cdecl*)(void*)>(g_worldTextDrawTarget)(batch);
     }
     __finally
     {
         SuppressDepthWrite(device, false);
     }
+}
+
+const void* RetargetWorldTextDrawThunk(uintptr_t target)
+{
+    g_worldTextDrawTarget = target;
+    return reinterpret_cast<const void*>(&WorldTextDrawThunk);
 }
 
 namespace

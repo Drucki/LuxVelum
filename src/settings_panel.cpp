@@ -259,8 +259,8 @@ bool DrawWorld(Config& c)
                       "the stock client does, with a linear fog fitted to the volumetric fog within 100 yd; the fog "
                       "is drawn before them, after the water. Beyond 100 yd the line is extended, so distant effects "
                       "and fading models can be fogged more or less than the scene around them, and past its end "
-                      "distant glows vanish. Off: the fog is drawn once after the whole world and they take the fog "
-                      "of the scene behind them");
+                      "distant glows vanish. Off: the fog is drawn once after the world, before the names, and they "
+                      "take the fog of the scene behind them");
     changed |= Toggle("Water writes depth", c.liquidDepth,
                       "Let water surfaces write depth so water is fogged by its own distance; always on while Modern "
                       "water is drawn");
