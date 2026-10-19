@@ -25,6 +25,8 @@ This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), developm
 - **Storm fog over water**: no more bright lines on grazing water in noisy fog near point lights.
 - **Releases**: every push to `st0ny-main` publishes the install zip and keeps only the newest build:
   [CoAVolFog-Win32.zip](https://github.com/Raz0r1337/coa-vfog/releases/latest/download/CoAVolFog-Win32.zip).
+  A push to `st0ny-dev` that `st0ny-main` does not contain yet publishes a pre-release `build-<next>-test` for
+  testing the next version.
 
 ## What it draws
 
@@ -606,10 +608,13 @@ ZIP containing `version.dll`, `CoAVolFog.dll`, `CoAVolFog.ini`, `fogdata.bin`, `
 and a `BUILD.txt` identifying the commit and validation. Artifacts are kept for 30 days; rerun the workflow to
 rebuild an expired download. Pull-request artifacts are builds of GitHub's proposed merge revision.
 
-Pushes to the development branch `st0ny-dev` are built and checked but publish nothing. On a push to the release
-branch `st0ny-main`, and on a manual run of that branch, a second job publishes the same files as a GitHub release
-`build-<run>` with the asset `CoAVolFog-Win32.zip`, which needs no login to download, and then deletes every other
-release with its tag, so the fork keeps only the newest build at `releases/latest/download/CoAVolFog-Win32.zip`. A
+On a push to the release branch `st0ny-main`, and on a manual run of that branch, a second job publishes the same
+files as a GitHub release `build-<n>` with the asset `CoAVolFog-Win32.zip`, which needs no login to download, and
+then deletes every other release with its tag, test releases included, so the fork keeps only the newest build at
+`releases/latest/download/CoAVolFog-Win32.zip`. `<n>` counts on from the highest `build-<n>` release; a rerun of a
+commit that already has one refreshes it. On a push to the development branch `st0ny-dev`, and on a manual run of
+it, a test job deletes every `build-<n>-test` release and, when `st0ny-dev` has commits that `st0ny-main` lacks,
+publishes `build-<n+1>-test` as a pre-release marked TEST, which never becomes `releases/latest`. A
 build whose branch has already moved on to a newer commit gets no release and deletes nothing; other branches and
 pull requests publish none.
 

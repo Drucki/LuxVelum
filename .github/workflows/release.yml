@@ -109,14 +109,22 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          tag="build-${RUN_NUMBER}"
           short="${SHA:0:7}"
           head=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${BRANCH}" --jq .commit.sha)
           if [ "$head" != "$SHA" ]; then
             echo "::notice::${BRANCH} has moved on to ${head:0:7}; the superseded build ${short} gets no release"
             exit 0
           fi
-          title="${BRANCH} build ${RUN_NUMBER} (${short})"
+          releases=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.prerelease | not) | select(.tag_name | test("^build-[0-9]+$")) |
+                  "\(.tag_name | ltrimstr("build-")) \(.target_commitish)"')
+          number=$(echo "$releases" | awk -v sha="$SHA" '$2 == sha { print $1; exit }')
+          if [ -z "$number" ]; then
+            highest=$(echo "$releases" | awk 'NF { print $1 }' | sort -n | tail -n 1)
+            number=$(( ${highest:-0} + 1 ))
+          fi
+          tag="build-${number}"
+          title="${BRANCH} build ${number} (${short})"
           {
             echo "Win32 Release build of \`${BRANCH}\` at ${short}."
             echo
@@ -150,3 +158,72 @@ jobs:
             gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes ||
               echo "::warning::the older release ${old} could not be deleted"
           done
+
+  test-release:
+    name: Publish or remove the test release of st0ny-dev
+    needs: build
+    if: >-
+      github.ref == 'refs/heads/st0ny-dev' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download install files
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: CoAVolFog-Win32-${{ github.sha }}
+          path: package
+
+      - name: Zip install files
+        run: |
+          cd package
+          zip -r ../CoAVolFog-Win32.zip .
+
+      - name: Replace the test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          MAIN: st0ny-main
+          SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          short="${SHA:0:7}"
+          head=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${BRANCH}" --jq .commit.sha)
+          if [ "$head" != "$SHA" ]; then
+            echo "::notice::${BRANCH} has moved on to ${head:0:7}; the superseded build ${short} gets no test release"
+            exit 0
+          fi
+          releases=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | "\(.tag_name) \(.prerelease)"')
+          tests=$(echo "$releases" | awk '$1 ~ /^build-[0-9]+-test$/ { print $1 }')
+          for old in $tests; do
+            gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes ||
+              echo "::warning::the old test release ${old} could not be deleted"
+          done
+          ahead=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${MAIN}...${SHA}" --jq .ahead_by)
+          if [ "$ahead" = "0" ]; then
+            echo "::notice::${MAIN} already contains ${short}; no test release"
+            exit 0
+          fi
+          highest=$(echo "$releases" |
+            awk '$2 == "false" && $1 ~ /^build-[0-9]+$/ { sub("build-", "", $1); print $1 }' | sort -n | tail -n 1)
+          number=$(( ${highest:-0} + 1 ))
+          tag="build-${number}-test"
+          title="TEST build ${number} (${BRANCH} ${short})"
+          {
+            echo "**Test build, not a release.** It is the candidate for build ${number}: \`${BRANCH}\` at ${short},"
+            echo "${ahead} commit(s) ahead of \`${MAIN}\`. Use it only to test the next version; the current release"
+            echo "stays at releases/latest."
+            echo
+            echo "With the client closed, unzip \`CoAVolFog-Win32.zip\` into the client folder next to \`Wow.exe\`,"
+            echo "replacing \`version.dll\`, \`CoAVolFog.dll\`, \`CoAVolFog.ini\` (the default settings),"
+            echo "\`fogdata.bin\` and \`waterdata.bin\`. \`BUILD.txt\` names the commit."
+            echo
+            echo "Validation: build, source comments and CPU harness passed in [run ${RUN_NUMBER}](${RUN_URL})."
+            echo "D3D9 graphics checks and in-game validation were not run."
+          } > notes.md
+          gh release create "$tag" CoAVolFog-Win32.zip --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
+            --target "$SHA" --title "$title" --notes-file notes.md
