@@ -754,7 +754,7 @@ void OnOpaqueDone()
     g_worldClient->captureOpaqueState(RealDevice(device));
 }
 
-void OnWorldTextBegin()
+void DrawFogBeforeWorldText()
 {
     if (g_failed || !g_transparentFog.inWorld || g_transparentFog.composited || g_transparentFog.drawnBeforeWorldText)
         return;
@@ -1299,7 +1299,7 @@ __declspec(naked) static void M2BatchFogThunk()
     }
 }
 
-static void __cdecl GlarePassThunk()
+void CallGlarePassUnlessDrawn()
 {
     if (g_transparentFog.glareDrawn)
     {
@@ -1308,6 +1308,19 @@ static void __cdecl GlarePassThunk()
     }
     ++g_transparentFogStats.glareCallsPassed;
     reinterpret_cast<void(__cdecl*)()>(g_glarePassTarget)();
+}
+
+static void __cdecl GlarePassThunk()
+{
+    CallGlarePassUnlessDrawn();
+    __try
+    {
+        DrawFogBeforeWorldText();
+    }
+    __except (GuardFilter(GetExceptionCode(), "fog after the glare"))
+    {
+        g_failed = true;
+    }
 }
 
 const void* RetargetM2BatchFogThunk(uintptr_t target)
@@ -1383,7 +1396,7 @@ static void __cdecl WorldTextDrawThunk(void* batch)
 {
     __try
     {
-        OnWorldTextBegin();
+        DrawFogBeforeWorldText();
     }
     __except (GuardFilter(GetExceptionCode(), "world text fog hook"))
     {

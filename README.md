@@ -285,7 +285,8 @@ rates from fields 4–9. The water is tuned by eye against this mapping, not mat
   the world text did not). The original bytes are checked first; on any mismatch nothing is patched. Two more
   retarget the far-clip clamp calls (`0x780810`, `0x781444`) when `FarClipMax` is set at start-up, independently of
   the fog hooks.
-- **Transparent fog hooks.** The M2 batch fog call (`0x81FD15`) and the glare pass call (`0x4F9213`), installed
+- **Transparent fog hooks.** The M2 batch fog call (`0x81FD15`) and the glare pass call (`0x4F9213`, then draws
+  the fog before the world text unless it already composited this frame), installed
   after the fog hooks whatever `TransparentFog` says, and neither when a byte run checked under M2 batch fog, M2 fog
   setter or Native glare differs. The M2 thunk forwards to the client while nothing is armed and otherwise hands the
   cdecl argument block to the DLL (`pushad; lea eax, [esp+0x24]`); an exception in it turns transparent fog off.
@@ -378,7 +379,10 @@ Engine notes behind the code:
   the glare, so a fog composite after it fogs each glyph by the depth behind it: names in front of the sky took the
   sky's full fog and vanished, while the same name in front of a nearby tree stayed visible. The thunk therefore draws
   the fog first when it has not composited this frame, as the stock client leaves names unfogged, and the world-done
-  hook then skips it. The later name/icon path at `0x4FB042` is left in place.
+  hook then skips it. A name in front of a tree was still reported with the sky's fog beside the trunk with only this
+  hook, so the glare thunk at `0x4F9213` draws the fog when the glare pass returns, just before the world text call
+  (`0x4F9218`) that its byte guard checks; the text hook stays as the fallback while the glare thunk is not
+  installed. The later name/icon path at `0x4FB042` is left in place.
 - Native glare. `0x4F9213` (`E8 58 76 2F 00`) calls the sun/moon glare pass `0x7F0870`, which is not patched.
   Its draw `0x9AC400` adds the `sunGlare`/`moonGlare` quads (`D3DBLEND_SRCALPHA`, `D3DBLEND_ONE`) at depth
   `[0.9990234375, 1]`, and its update `0x9AC3C0` runs a GPU occlusion query against the current world depth
