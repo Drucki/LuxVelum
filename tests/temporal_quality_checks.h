@@ -11,6 +11,8 @@ constexpr float kFogDistance = 100.0f;
 constexpr float kCurrentFog = 0.2f;
 constexpr float kHistoryFog = 0.8f;
 constexpr float kWeight = 0.75f;
+constexpr float kJitterHighFog = 0.3f;
+constexpr float kJitterLowFog = 0.1f;
 constexpr float kSameSurfaceAverage = (7.0f * kCurrentFog + 1.0f) / 9.0f;
 
 DWORD Grey(float value)
@@ -35,6 +37,20 @@ bool Fill(IDirect3DTexture9* texture, DWORD colour, int changedIndex = -1, DWORD
         auto* row = reinterpret_cast<DWORD*>(static_cast<BYTE*>(locked.pBits) + y * locked.Pitch);
         for (UINT x = 0; x < kSize; ++x)
             row[x] = static_cast<int>(y * kSize + x) == changedIndex ? changedColour : colour;
+    }
+    return SUCCEEDED(texture->UnlockRect(0));
+}
+
+bool FillJitterCheckerboard(IDirect3DTexture9* texture)
+{
+    D3DLOCKED_RECT locked = {};
+    if (FAILED(texture->LockRect(0, &locked, nullptr, 0)))
+        return false;
+    for (UINT y = 0; y < kSize; ++y)
+    {
+        auto* row = reinterpret_cast<DWORD*>(static_cast<BYTE*>(locked.pBits) + y * locked.Pitch);
+        for (UINT x = 0; x < kSize; ++x)
+            row[x] = Grey((x + y) % 2 == 0 ? kJitterHighFog : kJitterLowFog);
     }
     return SUCCEEDED(texture->UnlockRect(0));
 }
@@ -478,14 +494,17 @@ void CheckTemporalQuality(IDirect3DDevice9* dev)
     Check(Fill(fixture.inputs[1], Grey(0.22f)) &&
               NearTemporal(fixture.Draw(true, 0, true), kCurrentFog * (1 - kWeight) + 0.22f * kWeight),
           "stable lighting retains the configured history weight for small radiance differences");
-    Check(Fill(fixture.inputs[1], Grey(kCurrentFog / 0.7f)) &&
+    Check(Fill(fixture.inputs[0], Grey(kCurrentFog)) && Fill(fixture.inputs[1], Grey(kCurrentFog / 0.7f)) &&
               NearTemporal(fixture.Draw(true, 0, true), kCurrentFog + (kCurrentFog / 0.7f - kCurrentFog) *
                                                                           kWeight * 0.5f),
           "temporal lighting rejection fades continuously through intermediate radiance changes");
-    Check(Fill(fixture.inputs[0], Grey(kCurrentFog), 5, Grey(kHistoryFog)) &&
+    Check(Fill(fixture.inputs[0], Grey(kHistoryFog), 0, Grey(kCurrentFog)) &&
               Fill(fixture.inputs[1], Grey(kCurrentFog)) &&
               NearTemporal(fixture.Draw(true, 0, true), kHistoryFog),
           "moving light brightening rejects stale radiance at the same surface depth");
+    Check(FillJitterCheckerboard(fixture.inputs[0]) && Fill(fixture.inputs[1], Grey(kCurrentFog)) &&
+              NearTemporal(fixture.Draw(true, 0, true), kJitterHighFog * (1 - kWeight) + kCurrentFog * kWeight),
+          "per-texel step jitter around converged fog keeps the history weight under adaptive lighting");
     fixture.Reset();
     fixture.reproject[15] = 1.0f;
     Check(Fill(fixture.inputs[3], PackedDepth(2.0f, 0)) && NearTemporal(fixture.Draw(), accumulated),

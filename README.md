@@ -76,8 +76,9 @@ Variants that sample authored noise run only while a Classic layer carries it.
 
 With `Temporal` above 0, samples vary between frames and a temporal filter accumulates them. It rejects history
 from a different surface depth or depth class (world, distant terrain, sky) and lowers its weight where animated
-lighting changes the radiance; settings, map, screen-effect slot, projection and large camera changes discard
-it. With `Temporal=0`, samples stay at fixed midpoints so a stationary frame does not shimmer, and the temporal
+lighting changes the radiance, judged on the mean of the current 3×3 low-resolution neighbourhood so the per-texel
+step jitter does not read as a lighting change and stays filtered; settings, map, screen-effect slot, projection
+and large camera changes discard it. With `Temporal=0`, samples stay at fixed midpoints so a stationary frame does not shimmer, and the temporal
 passes are skipped.
 Where no history applies (a newly exposed surface, the screen edge while turning, the frame after a discard), the
 filter returns the average of the current samples in the 3×3 low-resolution neighbourhood on the pixel's surface.

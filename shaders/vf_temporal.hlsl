@@ -21,24 +21,33 @@ bool HistoryInvalid()
     return cTemporal.y <= 0;
 }
 
-float LightingHistoryWeight(float3 current, float3 history)
+float LightingHistoryWeight(float3 currentMean, float3 history)
 {
     float weight = HistoryWeight();
     [branch] if (cTemporal.z > 0)
     {
-        float3 difference = abs(current - history);
+        float3 difference = abs(currentMean - history);
         float peakDifference = max(difference.r, max(difference.g, difference.b));
-        float3 peak = max(current, history);
+        float3 peak = max(currentMean, history);
         float brightness = max(0.05, max(peak.r, max(peak.g, peak.b)));
         weight *= 1 - smoothstep(0.20, 0.40, peakDifference / brightness);
     }
     return weight;
 }
 
-void CurrentNeighbourhoodRange(float2 uv, float4 centre, out float4 lowest, out float4 highest)
+struct Neighbourhood
 {
-    lowest = centre;
-    highest = centre;
+    float4 lowest;
+    float4 highest;
+    float4 mean;
+};
+
+Neighbourhood CurrentNeighbourhood(float2 uv, float4 centre)
+{
+    Neighbourhood range;
+    range.lowest = centre;
+    range.highest = centre;
+    float4 sum = centre;
     static const float2 kNeighbourOffsets[8] = {
         float2(-1, -1), float2(0, -1), float2(1, -1), float2(-1, 0),
         float2(1, 0), float2(-1, 1), float2(0, 1), float2(1, 1)
@@ -46,9 +55,12 @@ void CurrentNeighbourhoodRange(float2 uv, float4 centre, out float4 lowest, out 
     [unroll] for (int k = 0; k < 8; k++)
     {
         float4 neighbour = tex2Dlod(sCurrent, float4(uv + kNeighbourOffsets[k] * LowResTexelSize(), 0, 0));
-        lowest = min(lowest, neighbour);
-        highest = max(highest, neighbour);
+        range.lowest = min(range.lowest, neighbour);
+        range.highest = max(range.highest, neighbour);
+        sum += neighbour;
     }
+    range.mean = sum / 9;
+    return range;
 }
 
 bool MatchesSurface(float expectedDepth, float depthClass, float tapViewZ, float tapDepthClass)
@@ -150,9 +162,7 @@ float4 main(float2 lowResTexel : VPOS) : COLOR0
         return SameSurfaceCurrentAverage(lowResTexel, viewZ, depthClass);
 
     float4 current = tex2Dlod(sCurrent, float4(uv, 0, 0));
-    float4 lowest;
-    float4 highest;
-    CurrentNeighbourhoodRange(uv, current, lowest, highest);
-    float4 history = clamp(reprojected.value, lowest, highest);
-    return lerp(current, history, LightingHistoryWeight(current.rgb, history.rgb));
+    Neighbourhood neighbourhood = CurrentNeighbourhood(uv, current);
+    float4 history = clamp(reprojected.value, neighbourhood.lowest, neighbourhood.highest);
+    return lerp(current, history, LightingHistoryWeight(neighbourhood.mean.rgb, history.rgb));
 }
