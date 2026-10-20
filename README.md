@@ -10,6 +10,11 @@ wave spectra and foam textures.
 
 ## About this fork
 
+**Please note:** I am not the author or maintainer of CoAVolFog. The project belongs to
+[jealous-sound](https://github.com/jealous-sound/coa-vfog); this fork only tries to adapt it to Project Reforged. I have
+no background in volumetric lighting or fog effects, so while I do my best, I cannot guarantee that a change here does
+not make things worse instead of better. If in doubt, leave CoAVolFog disabled (`Enable=0` in `CoAVolFog.ini`).
+
 This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), development on `st0ny-dev`, releases from
 `st0ny-main`) builds on
 [jealous-sound/coa-vfog](https://github.com/jealous-sound/coa-vfog) and fixes fog lights that flickered or went out:
