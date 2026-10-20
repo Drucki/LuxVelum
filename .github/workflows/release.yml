@@ -124,7 +124,7 @@ jobs:
             number=$(( ${highest:-0} + 1 ))
           fi
           tag="build-${number}"
-          title="COA Build-${number} (${BRANCH} ${short})"
+          title="CoAVolFog Build-${number} (${BRANCH} ${short})"
           {
             echo "Win32 Release build of \`${BRANCH}\` at ${short}."
             echo
@@ -212,7 +212,7 @@ jobs:
             awk '$2 == "false" && $1 ~ /^build-[0-9]+$/ { sub("build-", "", $1); print $1 }' | sort -n | tail -n 1)
           number=$(( ${highest:-0} + 1 ))
           tag="build-${number}-test"
-          title="COA TEST Build-${number} (${BRANCH} ${short})"
+          title="CoAVolFog TEST Build-${number} (${BRANCH} ${short})"
           {
             echo "**Test build, not a release.** It is the candidate for build ${number}: \`${BRANCH}\` at ${short},"
             echo "${ahead} commit(s) ahead of \`${MAIN}\`. Use it only to test the next version; the current release"
