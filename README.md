@@ -28,6 +28,9 @@ This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), developm
 - **Smooth swaps**: lights fade in and out over about a second when they take or give up a slot; a light entering
   from the edge of the view shines at once.
 - **Storm fog over water**: no more bright lines on grazing water in noisy fog near point lights.
+- **Grain in the fog**: the temporal filter no longer takes the march jitter for a light change, so the dot pattern
+  at low quality is filtered away.
+- **Fog in the rain**: where the Forever kit has no storm fog for a light, the clear fog stays when it rains.
 - **Releases**: every push to `st0ny-main` publishes the install zip and keeps only the newest build:
   [CoAVolFog-Win32.zip](https://github.com/Raz0r1337/coa-vfog/releases/latest/download/CoAVolFog-Win32.zip).
   A push to `st0ny-dev` that `st0ny-main` does not contain yet publishes a pre-release `build-<next>-test` for
@@ -212,7 +215,9 @@ linear to the falloff end, the rest to the zone light whose outline holds the ca
 innermost outline on top), and otherwise to the map's global light. Each light uses the condition slot the
 client uses for its stock lighting: the slot a screen effect forces (the ghost effect forces slot 4, death),
 otherwise clear weather (slot 0) blended toward storm (slot 2) by the client's storm weight. The two time keys
-around the current time are interpolated and layers are paired by their Classic layer index.
+around the current time are interpolated and layers are paired by their Classic layer index. Storm light params
+without fog keys (31 lights, among them light 42 in the Eastern Plaguelands) keep the clear layers through the
+storm instead of fading the fog out with the rain.
 
 Then the Classic transforms apply: density ×0.01, heights relative to the player when flag bit 1 is set, shadow
 colour and density for flag bit 0 while the light is below the horizon, `1 + strength·((d − start)/range)^exponent`
