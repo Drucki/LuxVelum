@@ -59,10 +59,13 @@ std::string ModuleDirectory(HMODULE module)
 void Attach(HMODULE module)
 {
     std::string dir = ModuleDirectory(module);
-    LogOpen((dir + "CoAVolFog.log").c_str());
-    GlobalConfig().Load(dir + "CoAVolFog.ini");
+    LogOpen((dir + "Luxvelum.log").c_str());
+    const char* adoptedFrom = AdoptEarlierSettings(dir);
+    GlobalConfig().Load(dir + "Luxvelum.ini");
     const Config& cfg = GlobalConfig().Get();
-    VF_LOG_INFO("CoAVolFog loaded from %s", dir.c_str());
+    VF_LOG_INFO("Luxvelum loaded from %s", dir.c_str());
+    if (adoptedFrom)
+        VF_LOG_INFO("settings taken over from %s into Luxvelum.ini", adoptedFrom);
     GlobalFogData().Load(dir + "fogdata.bin");
 
     if (!engine::IsSupportedClient())
