@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      refresh:
+        description: On st0ny-main, rebuild the newest release under its number instead of counting on
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -108,6 +113,7 @@ jobs:
           SHA: ${{ github.sha }}
           RUN_NUMBER: ${{ github.run_number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REFRESH: ${{ inputs.refresh }}
         run: |
           short="${SHA:0:7}"
           head=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${BRANCH}" --jq .commit.sha)
@@ -119,8 +125,12 @@ jobs:
             --jq '.[] | select(.prerelease | not) | select(.tag_name | test("^build-[0-9]+$")) |
                   "\(.tag_name | ltrimstr("build-")) \(.target_commitish)"')
           number=$(echo "$releases" | awk -v sha="$SHA" '$2 == sha { print $1; exit }')
+          highest=$(echo "$releases" | awk 'NF { print $1 }' | sort -n | tail -n 1)
+          if [ -z "$number" ] && [ "$REFRESH" = "true" ] && [ -n "$highest" ]; then
+            number="$highest"
+            gh release delete "build-${number}" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          fi
           if [ -z "$number" ]; then
-            highest=$(echo "$releases" | awk 'NF { print $1 }' | sort -n | tail -n 1)
             number=$(( ${highest:-0} + 1 ))
           fi
           tag="build-${number}"

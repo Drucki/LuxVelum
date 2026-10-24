@@ -630,7 +630,9 @@ On a push to the release branch `st0ny-main`, and on a manual run of that branch
 files as a GitHub release `build-<n>` titled `LuxVelum Build-<n> (st0ny-main <commit>)` with the asset
 `LuxVelum-Win32.zip`, which needs no login to download, and then deletes every other release with its tag, test
 releases included, so the fork keeps only the newest build at `releases/latest/download/LuxVelum-Win32.zip`. `<n>`
-counts on from the highest `build-<n>` release; a rerun of a commit that already has one refreshes it. On a push to
+counts on from the highest `build-<n>` release; a rerun of a commit that already has one refreshes it. A manual run
+of `st0ny-main` with `refresh` set rebuilds the highest `build-<n>` at the new commit under the same `<n>`; a push
+whose commit message carries `[skip ci]` runs nothing, so a fix can join the current release this way. On a push to
 the development branch `st0ny-dev`, and on a manual run of it, a test job deletes every `build-<n>-test` release
 and, when `st0ny-dev` has commits that `st0ny-main` lacks, publishes `build-<n+1>-test` as a pre-release titled
 `LuxVelum TEST Build-<n+1> (st0ny-dev <commit>)`, which never becomes `releases/latest`. A build whose branch has
