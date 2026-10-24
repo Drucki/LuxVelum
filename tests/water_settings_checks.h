@@ -120,7 +120,7 @@ void CheckShippedWaterDefaults(const std::wstring& shippedIni)
 void CheckWaterSettingsSave(const std::wstring& outDir, const std::wstring& shippedIni)
 {
     const std::wstring savedIni = FullPath(outDir + L"\\water-saved.ini");
-    Check(CopyFileW(shippedIni.c_str(), savedIni.c_str(), FALSE) != FALSE, "shipped Luxvelum.ini copied for water");
+    Check(CopyFileW(shippedIni.c_str(), savedIni.c_str(), FALSE) != FALSE, "shipped LuxVelum.ini copied for water");
     ConfigStore store;
     store.Load(NarrowPath(savedIni));
     Config edited = store.Get();
@@ -169,7 +169,7 @@ void CheckWaterSettingsSave(const std::wstring& outDir, const std::wstring& ship
 void CheckWaterSettingClamps(const std::wstring& outDir, const std::wstring& shippedIni)
 {
     const std::wstring clampedIni = FullPath(outDir + L"\\water-clamped.ini");
-    Check(CopyFileW(shippedIni.c_str(), clampedIni.c_str(), FALSE) != FALSE, "shipped Luxvelum.ini copied for clamps");
+    Check(CopyFileW(shippedIni.c_str(), clampedIni.c_str(), FALSE) != FALSE, "shipped LuxVelum.ini copied for clamps");
     const wchar_t* const outOfRange[][2] = {
         {L"Water", L"7"},           {L"WaterQuality", L"9"},     {L"WaterWaves", L"-3"},
         {L"WaterWind", L"100"},     {L"WaterFoam", L"5"},        {L"WaterReflections", L"-1"},
@@ -177,7 +177,7 @@ void CheckWaterSettingClamps(const std::wstring& outDir, const std::wstring& shi
         {L"WaterRipples", L"5"},    {L"WaterDebugView", L"42"},    {L"WaterClientSplashes", L"7"},
     };
     for (const auto& key : outOfRange)
-        WritePrivateProfileStringW(L"Luxvelum", key[0], key[1], clampedIni.c_str());
+        WritePrivateProfileStringW(L"LuxVelum", key[0], key[1], clampedIni.c_str());
     ConfigStore store;
     store.Load(NarrowPath(clampedIni));
     const Config& c = store.Get();
@@ -190,9 +190,9 @@ void CheckWaterSettingClamps(const std::wstring& outDir, const std::wstring& shi
               c.waterZoneColors == 1.0f && c.waterRipples == 2.0f && c.waterDebugView == 6 && c.waterClientSplashes,
           "out-of-range water keys in the INI are clamped to their ranges");
 
-    WritePrivateProfileStringW(L"Luxvelum", L"WaterWaves", L"nan", clampedIni.c_str());
-    WritePrivateProfileStringW(L"Luxvelum", L"WaterFoam", L"lots", clampedIni.c_str());
-    WritePrivateProfileStringW(L"Luxvelum", L"WaterQuality", L"0", clampedIni.c_str());
+    WritePrivateProfileStringW(L"LuxVelum", L"WaterWaves", L"nan", clampedIni.c_str());
+    WritePrivateProfileStringW(L"LuxVelum", L"WaterFoam", L"lots", clampedIni.c_str());
+    WritePrivateProfileStringW(L"LuxVelum", L"WaterQuality", L"0", clampedIni.c_str());
     store.Revert();
     Check(store.Get().waterWaves == Config().waterWaves && store.Get().waterFoam == Config().waterFoam &&
               store.Get().waterQuality == 1,
@@ -287,7 +287,7 @@ void CheckSettingChangesLogged(const std::wstring& outDir, const std::wstring& s
 {
     const std::wstring& logPath = g_harnessLog;
     const std::wstring iniPath = FullPath(outDir + L"\\settings-log.ini");
-    Check(CopyFileW(shippedIni.c_str(), iniPath.c_str(), FALSE) != FALSE, "shipped Luxvelum.ini copied for logging");
+    Check(CopyFileW(shippedIni.c_str(), iniPath.c_str(), FALSE) != FALSE, "shipped LuxVelum.ini copied for logging");
     ConfigStore store;
     store.Load(NarrowPath(iniPath));
     LogSetLevel(static_cast<int>(LogLevel::Info));
@@ -297,8 +297,8 @@ void CheckSettingChangesLogged(const std::wstring& outDir, const std::wstring& s
         return text.size() > start ? text.substr(start) : std::string();
     };
 
-    WritePrivateProfileStringW(L"Luxvelum", L"Density", L"2.5", iniPath.c_str());
-    WritePrivateProfileStringW(L"Luxvelum", L"WaterFoam", L"1.5", iniPath.c_str());
+    WritePrivateProfileStringW(L"LuxVelum", L"Density", L"2.5", iniPath.c_str());
+    WritePrivateProfileStringW(L"LuxVelum", L"WaterFoam", L"1.5", iniPath.c_str());
     const bool reloaded = store.ReloadIfChanged();
     Config edited = store.Get();
     edited.waterWind = 3.0f;
@@ -311,12 +311,12 @@ void CheckSettingChangesLogged(const std::wstring& outDir, const std::wstring& s
     store.Revert();
     const std::string text = logged();
     std::printf("%s", text.c_str());
-    Check(reloaded && runtime_cost::HasLine(text, "settings from Luxvelum.ini: Density 1 -> 2.5, WaterFoam 1 -> 1.5"),
+    Check(reloaded && runtime_cost::HasLine(text, "settings from LuxVelum.ini: Density 1 -> 2.5, WaterFoam 1 -> 1.5"),
           "an INI reload logs the changed keys with their old and new values");
     Check(quietWhileEditing && CountOf(text, "settings: WaterWind 2 -> 4") == 1 &&
               CountOf(text, "WaterWind 2 -> 3") == 0,
           "a window edit logs one line once it settles, from the value before the edit to the value after it");
-    Check(runtime_cost::HasLine(text, "settings reverted to Luxvelum.ini: WaterWind 4 -> 2"),
+    Check(runtime_cost::HasLine(text, "settings reverted to LuxVelum.ini: WaterWind 4 -> 2"),
           "reverting logs the keys it changes");
 }
 
@@ -329,7 +329,7 @@ std::string LoggedByTheHarnessSince(size_t start)
 void CheckSaveLogsNoRoundingChange(const std::wstring& outDir, const std::wstring& shippedIni)
 {
     const std::wstring iniPath = FullPath(outDir + L"\\settings-save-log.ini");
-    Check(CopyFileW(shippedIni.c_str(), iniPath.c_str(), FALSE) != FALSE, "shipped Luxvelum.ini copied for saving");
+    Check(CopyFileW(shippedIni.c_str(), iniPath.c_str(), FALSE) != FALSE, "shipped LuxVelum.ini copied for saving");
     ConfigStore store;
     store.Load(NarrowPath(iniPath));
     LogSetLevel(static_cast<int>(LogLevel::Info));
@@ -355,16 +355,16 @@ void CheckOverlayKeyReloadLogged(const std::wstring& outDir, const std::wstring&
     Check(changes == "Overlay 1 -> 0, OverlayKey Ctrl+F7 -> Ctrl+F8",
           "a settings change lists Overlay and OverlayKey, which an INI reload applies live");
     const std::wstring iniPath = FullPath(outDir + L"\\settings-overlay.ini");
-    Check(CopyFileW(shippedIni.c_str(), iniPath.c_str(), FALSE) != FALSE, "shipped Luxvelum.ini copied for OverlayKey");
+    Check(CopyFileW(shippedIni.c_str(), iniPath.c_str(), FALSE) != FALSE, "shipped LuxVelum.ini copied for OverlayKey");
     ConfigStore store;
     store.Load(NarrowPath(iniPath));
     LogSetLevel(static_cast<int>(LogLevel::Info));
     const size_t start = ReadText(g_harnessLog).size();
-    WritePrivateProfileStringW(L"Luxvelum", L"OverlayKey", L"Ctrl+F8", iniPath.c_str());
+    WritePrivateProfileStringW(L"LuxVelum", L"OverlayKey", L"Ctrl+F8", iniPath.c_str());
     const bool reloaded = store.ReloadIfChanged();
     const std::string text = LoggedByTheHarnessSince(start);
     std::printf("%s", text.c_str());
-    Check(reloaded && runtime_cost::HasLine(text, "settings from Luxvelum.ini: OverlayKey Ctrl+F7 -> Ctrl+F8") &&
+    Check(reloaded && runtime_cost::HasLine(text, "settings from LuxVelum.ini: OverlayKey Ctrl+F7 -> Ctrl+F8") &&
               !runtime_cost::HasLine(text, "no live setting changed"),
           "an INI reload that changes only OverlayKey logs the new key instead of saying nothing changed");
 }

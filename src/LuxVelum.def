@@ -1,4 +1,4 @@
-LIBRARY Luxvelum
+LIBRARY LuxVelum
 EXPORTS
     vf_loader_anchor
     vf_test_wrap_direct3d9

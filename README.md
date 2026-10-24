@@ -1,10 +1,10 @@
-# Luxvelum
+# LuxVelum
 
 Atmospheric Immersion for Project Reforged — WoW 3.3.5.
 
-Luxvelum is a fork of [CoAVolFog](https://github.com/jealous-sound/coa-vfog): volumetric fog and modern water for the
-Ascension/CoA 3.3.5a (build 12340) Direct3D 9 client. Its files are `Luxvelum.dll`, `Luxvelum.ini` and `Luxvelum.log`
-(`CoAVolFog.*` up to Build-23, `Luxveil.*` in TEST Build-24-11 and 24-12); without a `Luxvelum.ini` it takes over an
+LuxVelum is a fork of [CoAVolFog](https://github.com/jealous-sound/coa-vfog): volumetric fog and modern water for the
+Ascension/CoA 3.3.5a (build 12340) Direct3D 9 client. Its files are `LuxVelum.dll`, `LuxVelum.ini` and `LuxVelum.log`
+(`CoAVolFog.*` up to Build-23, `Luxveil.*` in TEST Build-24-11 and 24-12); without a `LuxVelum.ini` it takes over an
 existing `Luxveil.ini`, else `CoAVolFog.ini`, on its first start.
 
 It consists of a loader, a D3D9 device wrapper with a readable depth buffer, world-render hooks, a per-pixel
@@ -16,10 +16,10 @@ wave spectra and foam textures.
 ## About this fork
 
 **Please note:** I am not the author or maintainer of CoAVolFog. The project belongs to
-[jealous-sound](https://github.com/jealous-sound/coa-vfog); this fork, Luxvelum, only tries to adapt it to Project
+[jealous-sound](https://github.com/jealous-sound/coa-vfog); this fork, LuxVelum, only tries to adapt it to Project
 Reforged. I have no background in volumetric lighting or fog effects, so while I do my best, I cannot guarantee that a
-change here does not make things worse instead of better. If in doubt, leave Luxvelum disabled (`Enable=0` in
-`Luxvelum.ini`).
+change here does not make things worse instead of better. If in doubt, leave LuxVelum disabled (`Enable=0` in
+`LuxVelum.ini`).
 
 This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), development on `st0ny-dev`, releases from
 `st0ny-main`) builds on
@@ -38,7 +38,7 @@ This fork ([Raz0r1337/coa-vfog](https://github.com/Raz0r1337/coa-vfog), developm
   at low quality is filtered away.
 - **Fog in the rain**: where the Forever kit has no storm fog for a light, the clear fog stays when it rains.
 - **Releases**: every push to `st0ny-main` publishes the install zip and keeps only the newest build:
-  [Luxvelum-Win32.zip](https://github.com/Raz0r1337/coa-vfog/releases/latest/download/Luxvelum-Win32.zip).
+  [LuxVelum-Win32.zip](https://github.com/Raz0r1337/coa-vfog/releases/latest/download/LuxVelum-Win32.zip).
   A push to `st0ny-dev` that `st0ny-main` does not contain yet publishes a pre-release `build-<next>-test` for
   testing the next version.
 
@@ -287,7 +287,7 @@ rates from fields 4–9. The water is tuned by eye against this mapping, not mat
 ## How it attaches
 
 - **Loader.** A `version.dll` proxy; all 17 exports forward lazily to the system copy, and its static import
-  loads `Luxvelum.dll` before the client starts.
+  loads `LuxVelum.dll` before the client starts.
 - **D3D9.** The client resolves `Direct3DCreate9` through the delay-loaded `GetProcAddress` slot `[0xB2ED98]`.
   The DLL points that slot at a filter that returns a wrapped `IDirect3D9`. No d3d9 code is patched, so DXVK or
   other `d3d9.dll` builds keep working underneath.
@@ -587,7 +587,7 @@ Engine notes behind the code:
 `Ctrl+F7` (`OverlayKey`) shows and hides a Dear ImGui window over the game. On laptops whose F-keys send media
 keys by default, hold Fn (the log names the key that arrived). The window edits every setting below except
 `Enable`, `EngineHooks`, `Overlay` and `OverlayKey`, and the next frame uses the change. **Save** writes the
-settings changed in the window back to `Luxvelum.ini`, keeping the comments and every other line; settings not
+settings changed in the window back to `LuxVelum.ini`, keeping the comments and every other line; settings not
 changed in the window keep what the file holds. **Revert** reloads the file, and a hand edit of the file also
 replaces unsaved changes. The window shows whether the fog drew in the last frame, or why it did not.
 It also shows whether the game's multisampling is kept, or why it is off (`Multisampling` applies later, see
@@ -610,7 +610,7 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A Win32
 cmake --build build --config Release
 ```
 
-Outputs in `build/Release`: `version.dll`, `Luxvelum.dll` and `vfog_harness.exe`, with `Luxvelum.ini`,
+Outputs in `build/Release`: `version.dll`, `LuxVelum.dll` and `vfog_harness.exe`, with `LuxVelum.ini`,
 `fogdata.bin` and `waterdata.bin` copied beside them.
 
 ### Download a CI build
@@ -620,19 +620,19 @@ push to `main` (including merged pull requests), on pull requests targeting `mai
 **Actions → Windows release build → Run workflow**. The manual button becomes available after the workflow is
 merged into `main`; select a branch to rebuild that revision.
 
-Open a successful run and download its `Luxvelum-Win32-<commit>` artifact under **Artifacts**. GitHub supplies a
-ZIP containing `version.dll`, `Luxvelum.dll`, `Luxvelum.ini`, `fogdata.bin`, `waterdata.bin`, the README, licenses
+Open a successful run and download its `LuxVelum-Win32-<commit>` artifact under **Artifacts**. GitHub supplies a
+ZIP containing `version.dll`, `LuxVelum.dll`, `LuxVelum.ini`, `fogdata.bin`, `waterdata.bin`, the README, licenses
 and a `BUILD.txt` identifying the commit and validation. Artifacts are kept for 30 days; rerun the workflow to
 rebuild an expired download. Pull-request artifacts are builds of GitHub's proposed merge revision.
 
 On a push to the release branch `st0ny-main`, and on a manual run of that branch, a second job publishes the same
-files as a GitHub release `build-<n>` titled `Luxvelum Build-<n> (st0ny-main <commit>)` with the asset
-`Luxvelum-Win32.zip`, which needs no login to download, and then deletes every other release with its tag, test
-releases included, so the fork keeps only the newest build at `releases/latest/download/Luxvelum-Win32.zip`. `<n>`
+files as a GitHub release `build-<n>` titled `LuxVelum Build-<n> (st0ny-main <commit>)` with the asset
+`LuxVelum-Win32.zip`, which needs no login to download, and then deletes every other release with its tag, test
+releases included, so the fork keeps only the newest build at `releases/latest/download/LuxVelum-Win32.zip`. `<n>`
 counts on from the highest `build-<n>` release; a rerun of a commit that already has one refreshes it. On a push to
 the development branch `st0ny-dev`, and on a manual run of it, a test job deletes every `build-<n>-test` release
 and, when `st0ny-dev` has commits that `st0ny-main` lacks, publishes `build-<n+1>-test` as a pre-release titled
-`Luxvelum TEST Build-<n+1> (st0ny-dev <commit>)`, which never becomes `releases/latest`. A build whose branch has
+`LuxVelum TEST Build-<n+1> (st0ny-dev <commit>)`, which never becomes `releases/latest`. A build whose branch has
 already moved on to a newer commit gets no release and deletes nothing; other branches and pull requests publish
 none.
 
@@ -674,20 +674,20 @@ and wading-in units at `WaterRipples=0.5`, each as the shaded frame, its normals
 
 `vfog_harness --scene performance` times the fog passes at 1920×1080 at each quality on one street: derived
 layers with no point lights, eight flood lights or eight street lamps, Classic layers at the harbour with and
-without the lamps (skipped if `fogdata.bin` beside `Luxvelum.dll` does not resolve the harbour), and the shipped
+without the lamps (skipped if `fogdata.bin` beside `LuxVelum.dll` does not resolve the harbour), and the shipped
 `LogLevel=1`. It prints `quality,case,point_lights,median_ms,p95_ms` of GPU time; this is a controlled renderer
 cost, not a game frame-rate test.
 It also times the harbour in a full storm and the colour grading pass; `--samples 4` creates a 4x device.
 
 ## Install
 
-Close the client, then copy `version.dll`, `Luxvelum.dll`, `Luxvelum.ini`, `fogdata.bin` and `waterdata.bin`
+Close the client, then copy `version.dll`, `LuxVelum.dll`, `LuxVelum.ini`, `fogdata.bin` and `waterdata.bin`
 next to `Ascension.exe`.
-Remove `version.dll` and `Luxvelum.dll` to uninstall; nothing else in the client is changed. The DLL
-writes `Luxvelum.log` next to itself.
-To keep the settings of an earlier Luxveil or CoAVolFog install, leave out `Luxvelum.ini`: on its first start the DLL
-then copies `Luxveil.ini`, or without it `CoAVolFog.ini`, to `Luxvelum.ini` with its section renamed and logs which file
-it took; an existing `Luxvelum.ini` is never replaced. The old `Luxveil.dll`, `Luxveil.ini`, `Luxveil.log`,
+Remove `version.dll` and `LuxVelum.dll` to uninstall; nothing else in the client is changed. The DLL
+writes `LuxVelum.log` next to itself.
+To keep the settings of an earlier Luxveil or CoAVolFog install, leave out `LuxVelum.ini`: on its first start the DLL
+then copies `Luxveil.ini`, or without it `CoAVolFog.ini`, to `LuxVelum.ini` with its section renamed and logs which file
+it took; an existing `LuxVelum.ini` is never replaced. The old `Luxveil.dll`, `Luxveil.ini`, `Luxveil.log`,
 `CoAVolFog.dll`, `CoAVolFog.ini` and `CoAVolFog.log` are no longer used and can be deleted.
 
 ## Steam Deck and Linux (Proton)
@@ -698,7 +698,7 @@ Install the files as above, then set the game's Steam launch options to:
 WINEDLLOVERRIDES=version=n,b %command%
 ```
 
-This lets the native `version.dll` proxy load Luxvelum before Proton's builtin version library.
+This lets the native `version.dll` proxy load LuxVelum before Proton's builtin version library.
 A Steam Deck test on 8 October 2026 (Proton with DXVK, AMD VanGogh, 1280x800) loaded the DLL and installed
 all hooks. DXVK copied the multisampled depth through `RESZ` into `INTZ`, passing the depth-copy self-test,
 so the default `Multisampling=1` worked on this device.
@@ -740,7 +740,7 @@ are logged with the feature they leave off.
 
 ## Settings
 
-`Luxvelum.ini` is re-read within a second while the game runs (except `Enable`, `EngineHooks` and `LightStay`);
+`LuxVelum.ini` is re-read within a second while the game runs (except `Enable`, `EngineHooks` and `LightStay`);
 its comments describe every key. In the game, `Ctrl+F7` opens the same settings in a window (see In-game settings).
 
 | Key | Default | Meaning |
@@ -868,4 +868,4 @@ As an additional permission under GPLv3 section 7, you may link or combine CoAVo
 with the World of Warcraft client, and distribute the resulting combination without providing the client's source
 code. GPLv3 continues to apply to CoAVolFog.
 
-Luxvelum is a modified version of CoAVolFog under the same licence and the same additional permission.
+LuxVelum is a modified version of CoAVolFog under the same licence and the same additional permission.

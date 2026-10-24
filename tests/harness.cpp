@@ -1370,9 +1370,9 @@ void CheckOverlayKeyNames()
 void CheckSettingsSaveKeepsTheIni(const std::wstring& outDir, const std::wstring& shippedIni)
 {
     const std::wstring savedIni = FullPath(outDir + L"\\saved.ini");
-    Check(CopyFileW(shippedIni.c_str(), savedIni.c_str(), FALSE) != FALSE, "shipped Luxvelum.ini copied");
+    Check(CopyFileW(shippedIni.c_str(), savedIni.c_str(), FALSE) != FALSE, "shipped LuxVelum.ini copied");
     for (const wchar_t* removedKey : {L"LightShafts", L"WorldShadows"})
-        WritePrivateProfileStringW(L"Luxvelum", removedKey, L"0", savedIni.c_str());
+        WritePrivateProfileStringW(L"LuxVelum", removedKey, L"0", savedIni.c_str());
     ConfigStore store;
     store.Load(NarrowPath(savedIni));
     const Config shipped = store.Get();
@@ -1408,7 +1408,7 @@ void CheckSettingsSaveKeepsTheIni(const std::wstring& outDir, const std::wstring
               r.localLights == edited.localLights && r.enable == shipped.enable && r.overlay == shipped.overlay,
           "saved settings reload unchanged and the restart-only keys stay as they were");
     const std::string text = ReadText(savedIni);
-    Check(text.rfind("; Luxvelum settings.", 0) == 0 && text.find("\nDensity=2.5") != std::string::npos &&
+    Check(text.rfind("; LuxVelum settings.", 0) == 0 && text.find("\nDensity=2.5") != std::string::npos &&
               text.find("\nHaze=1.0") != std::string::npos && text.find("\nEnable=1") != std::string::npos &&
               text.find("; Global density multiplier") != std::string::npos &&
               text.find("\nLightShafts=0") != std::string::npos && text.find("\nWorldShadows=0") != std::string::npos,
@@ -1423,7 +1423,7 @@ void CheckSettingsSaveKeepsTheIni(const std::wstring& outDir, const std::wstring
     Config typed = store.Get();
     typed.haze = 1.23456f;
     store.Apply(typed);
-    WritePrivateProfileStringW(L"Luxvelum", L"Quality", L"1", savedIni.c_str());
+    WritePrivateProfileStringW(L"LuxVelum", L"Quality", L"1", savedIni.c_str());
     const bool mergedSave = store.Save();
     ConfigStore afterMerge;
     afterMerge.Load(NarrowPath(savedIni));
@@ -1443,16 +1443,16 @@ bool WriteText(const std::wstring& path, const std::string& text)
     return std::fclose(f) == 0 && written;
 }
 
-constexpr const char* kLuxvelumSectionLine = "[Luxvelum]";
+constexpr const char* kLuxVelumSectionLine = "[LuxVelum]";
 
 bool WriteEarlierIni(const std::wstring& shippedIni, const std::wstring& path, const char* sectionLine,
                      const wchar_t* section, const wchar_t* density)
 {
     std::string earlier = ReadText(shippedIni);
-    const size_t at = earlier.find(kLuxvelumSectionLine);
+    const size_t at = earlier.find(kLuxVelumSectionLine);
     if (at == std::string::npos)
         return false;
-    earlier.replace(at, std::strlen(kLuxvelumSectionLine), sectionLine);
+    earlier.replace(at, std::strlen(kLuxVelumSectionLine), sectionLine);
     return WriteText(path, earlier) && WritePrivateProfileStringW(section, L"Density", density, path.c_str()) != FALSE;
 }
 
@@ -1460,7 +1460,7 @@ std::wstring FreshTakeoverDirectory(const std::wstring& outDir, const wchar_t* n
 {
     const std::wstring dir = FullPath(outDir + L"\\" + name);
     CreateDirectoryW(dir.c_str(), nullptr);
-    for (const wchar_t* file : {L"\\Luxvelum.ini", L"\\Luxveil.ini", L"\\CoAVolFog.ini"})
+    for (const wchar_t* file : {L"\\LuxVelum.ini", L"\\Luxveil.ini", L"\\CoAVolFog.ini"})
         DeleteFileW((dir + file).c_str());
     return dir;
 }
@@ -1472,7 +1472,7 @@ void CheckEarlierSettingsAreTakenOver(const std::wstring& outDir, const std::wst
 
     const std::wstring dir = FreshTakeoverDirectory(outDir, L"takeover");
     const std::wstring coaVolFogIni = dir + L"\\CoAVolFog.ini";
-    const std::wstring luxvelumIni = dir + L"\\Luxvelum.ini";
+    const std::wstring luxvelumIni = dir + L"\\LuxVelum.ini";
     Check(WriteEarlierIni(shippedIni, coaVolFogIni, "[coavolfog]", L"CoAVolFog", L"2.5"),
           "an old CoAVolFog.ini written");
     const std::string before = ReadText(coaVolFogIni);
@@ -1483,27 +1483,27 @@ void CheckEarlierSettingsAreTakenOver(const std::wstring& outDir, const std::wst
     Config expected = shipped.Get();
     expected.density = 2.5f;
     Check(adopted && std::strcmp(adopted, "CoAVolFog.ini") == 0 && SameLiveSettings(store.Get(), expected) &&
-              taken.find(kLuxvelumSectionLine) != std::string::npos && taken.find("[coavolfog]") == std::string::npos &&
+              taken.find(kLuxVelumSectionLine) != std::string::npos && taken.find("[coavolfog]") == std::string::npos &&
               taken.find("; Global density multiplier") != std::string::npos && ReadText(coaVolFogIni) == before,
-          "without a Luxvelum.ini the settings of an old CoAVolFog.ini are taken over, comments and all, under the "
-          "Luxvelum section, and the old file stays as it was");
+          "without a LuxVelum.ini the settings of an old CoAVolFog.ini are taken over, comments and all, under the "
+          "LuxVelum section, and the old file stays as it was");
 
     WritePrivateProfileStringW(L"CoAVolFog", L"Density", L"3", coaVolFogIni.c_str());
     const char* again = AdoptEarlierSettings(NarrowPath(dir + L"\\"));
     const std::wstring emptyDir = FreshTakeoverDirectory(outDir, L"takeover-none");
     const char* fromNothing = AdoptEarlierSettings(NarrowPath(emptyDir + L"\\"));
     Check(!again && ReadText(luxvelumIni) == taken && !fromNothing &&
-              GetFileAttributesW((emptyDir + L"\\Luxvelum.ini").c_str()) == INVALID_FILE_ATTRIBUTES,
-          "an existing Luxvelum.ini is never overwritten, and without an earlier INI none is made");
+              GetFileAttributesW((emptyDir + L"\\LuxVelum.ini").c_str()) == INVALID_FILE_ATTRIBUTES,
+          "an existing LuxVelum.ini is never overwritten, and without an earlier INI none is made");
 
     const std::wstring both = FreshTakeoverDirectory(outDir, L"takeover-both");
     const bool written = WriteEarlierIni(shippedIni, both + L"\\CoAVolFog.ini", "[CoAVolFog]", L"CoAVolFog", L"2.5") &&
                          WriteEarlierIni(shippedIni, both + L"\\Luxveil.ini", "[Luxveil]", L"Luxveil", L"1.75");
     const char* newest = AdoptEarlierSettings(NarrowPath(both + L"\\"));
     ConfigStore fromLuxveil;
-    fromLuxveil.Load(NarrowPath(both + L"\\Luxvelum.ini"));
+    fromLuxveil.Load(NarrowPath(both + L"\\LuxVelum.ini"));
     Check(written && newest && std::strcmp(newest, "Luxveil.ini") == 0 && fromLuxveil.Get().density == 1.75f &&
-              ReadText(both + L"\\Luxvelum.ini").find("[Luxveil]") == std::string::npos,
+              ReadText(both + L"\\LuxVelum.ini").find("[Luxveil]") == std::string::npos,
           "a Luxveil.ini from TEST Build-24-11 is taken over before an older CoAVolFog.ini");
 }
 
@@ -2961,7 +2961,7 @@ int wmain(int argc, wchar_t** argv)
     std::wstring out = L"harness-out";
     std::string data = "fogdata.bin";
     std::string waterData = "waterdata.bin";
-    std::wstring ini = L"Luxvelum.ini";
+    std::wstring ini = L"LuxVelum.ini";
     std::wstring scene;
     D3DMULTISAMPLE_TYPE samples = D3DMULTISAMPLE_NONE;
     HarbourOptions harbour;

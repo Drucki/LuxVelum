@@ -122,7 +122,7 @@ target_compile_definitions(imgui
     PRIVATE IMGUI_IMPL_WIN32_DISABLE_GAMEPAD IMGUI_DISABLE_WIN32_DEFAULT_IME_FUNCTIONS
             IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS WIN32_LEAN_AND_MEAN NOMINMAX)
 
-add_library(Luxvelum SHARED
+add_library(LuxVelum SHARED
     src/client_code.cpp
     src/client_light_stay.cpp
     src/client_ripple_sprites.cpp
@@ -153,15 +153,15 @@ add_library(Luxvelum SHARED
     src/water_renderer.cpp
     src/water_ripples.cpp
     src/water_spectrum.cpp
-    src/Luxvelum.def)
-add_dependencies(Luxvelum vf_shaders)
-target_include_directories(Luxvelum PRIVATE src ${SHADER_OUT})
-target_compile_definitions(Luxvelum PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
-target_compile_options(Luxvelum PRIVATE /W4 /wd4100 /arch:SSE2 /fp:fast /GS)
-target_link_libraries(Luxvelum PRIVATE kernel32 user32 imgui)
+    src/LuxVelum.def)
+add_dependencies(LuxVelum vf_shaders)
+target_include_directories(LuxVelum PRIVATE src ${SHADER_OUT})
+target_compile_definitions(LuxVelum PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+target_compile_options(LuxVelum PRIVATE /W4 /wd4100 /arch:SSE2 /fp:fast /GS)
+target_link_libraries(LuxVelum PRIVATE kernel32 user32 imgui)
 
 add_library(version SHARED proxy/version_proxy.cpp proxy/version.def)
-target_link_libraries(version PRIVATE Luxvelum)
+target_link_libraries(version PRIVATE LuxVelum)
 target_compile_definitions(version PRIVATE WIN32_LEAN_AND_MEAN)
 
 add_executable(vfog_harness tests/harness.cpp src/client_code.cpp src/client_light_stay.cpp
@@ -172,28 +172,28 @@ add_executable(vfog_harness tests/harness.cpp src/client_code.cpp src/client_lig
                src/water_fft.cpp src/water_ripples.cpp src/status_log.cpp)
 target_include_directories(vfog_harness PRIVATE src ${SHADER_OUT})
 target_compile_definitions(vfog_harness PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
-target_link_libraries(vfog_harness PRIVATE Luxvelum user32 ole32 windowscodecs)
-add_custom_command(TARGET Luxvelum POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/Luxvelum.ini
+target_link_libraries(vfog_harness PRIVATE LuxVelum user32 ole32 windowscodecs)
+add_custom_command(TARGET LuxVelum POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/LuxVelum.ini
             ${CMAKE_CURRENT_SOURCE_DIR}/data/fogdata.bin ${CMAKE_CURRENT_SOURCE_DIR}/data/waterdata.bin
-            $<TARGET_FILE_DIR:Luxvelum>)
+            $<TARGET_FILE_DIR:LuxVelum>)
 
 enable_testing()
-configure_file(Luxvelum.ini interior-test.ini COPYONLY)
+configure_file(LuxVelum.ini interior-test.ini COPYONLY)
 add_test(NAME interior_fog
     COMMAND vfog_harness --scene interior --ini ${CMAKE_CURRENT_BINARY_DIR}/interior-test.ini
     WORKING_DIRECTORY $<TARGET_FILE_DIR:vfog_harness>)
 add_test(NAME vfog_harness
     COMMAND vfog_harness --out ${CMAKE_CURRENT_BINARY_DIR}/harness-out
             --data ${CMAKE_CURRENT_SOURCE_DIR}/data/fogdata.bin
-            --ini ${CMAKE_CURRENT_SOURCE_DIR}/Luxvelum.ini
+            --ini ${CMAKE_CURRENT_SOURCE_DIR}/LuxVelum.ini
             --water-data ${CMAKE_CURRENT_SOURCE_DIR}/data/waterdata.bin
     WORKING_DIRECTORY $<TARGET_FILE_DIR:vfog_harness>)
 set_tests_properties(vfog_harness PROPERTIES LABELS gpu)
 add_test(NAME cpu_harness
     COMMAND vfog_harness --scene cpu --out ${CMAKE_CURRENT_BINARY_DIR}/cpu-harness-out
             --data ${CMAKE_CURRENT_SOURCE_DIR}/data/fogdata.bin
-            --ini ${CMAKE_CURRENT_SOURCE_DIR}/Luxvelum.ini
+            --ini ${CMAKE_CURRENT_SOURCE_DIR}/LuxVelum.ini
             --water-data ${CMAKE_CURRENT_SOURCE_DIR}/data/waterdata.bin
     WORKING_DIRECTORY $<TARGET_FILE_DIR:vfog_harness>)
 set_tests_properties(cpu_harness PROPERTIES LABELS cpu)

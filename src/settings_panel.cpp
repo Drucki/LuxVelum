@@ -328,7 +328,7 @@ bool DrawDebug(Config& c)
         return false;
     bool changed = Choice("View", c.debugView, 0, kDebugViewNames, "Show one input of the fog instead of the scene");
     changed |= Toggle("Sun marker", c.sunMarker, "Red marker where the sun direction projects on screen");
-    changed |= Choice("Log level", c.logLevel, 0, kLogLevelNames, "Detail written to Luxvelum.log");
+    changed |= Choice("Log level", c.logLevel, 0, kLogLevelNames, "Detail written to LuxVelum.log");
     return changed;
 }
 }
@@ -394,7 +394,7 @@ void SettingsPanel::Draw(ConfigStore& store, const FogFrameStatus& fogStatus, co
 {
     PlaceWindow();
     const bool expanded =
-        ImGui::Begin("Luxvelum", &open, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavInputs);
+        ImGui::Begin("LuxVelum", &open, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavInputs);
     if (!expanded)
     {
         ImGui::End();
@@ -418,18 +418,18 @@ void SettingsPanel::DrawSaveRow(ConfigStore& store)
     ImGui::BeginDisabled(!unsaved);
     if (ImGui::Button("Save"))
         m_saveFailed = !store.Save();
-    ImGui::SetItemTooltip("Write the changed settings to Luxvelum.ini");
+    ImGui::SetItemTooltip("Write the changed settings to LuxVelum.ini");
     ImGui::SameLine();
     if (ImGui::Button("Revert"))
     {
         store.Revert();
         m_saveFailed = false;
     }
-    ImGui::SetItemTooltip("Go back to the settings in Luxvelum.ini");
+    ImGui::SetItemTooltip("Go back to the settings in LuxVelum.ini");
     ImGui::EndDisabled();
     ImGui::SameLine();
     if (m_saveFailed)
-        ImGui::TextColored(kErrorColour, "Could not write Luxvelum.ini");
+        ImGui::TextColored(kErrorColour, "Could not write LuxVelum.ini");
     else
-        ImGui::TextDisabled("%s", unsaved ? "Unsaved changes" : "Matches Luxvelum.ini");
+        ImGui::TextDisabled("%s", unsaved ? "Unsaved changes" : "Matches LuxVelum.ini");
 }

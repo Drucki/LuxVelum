@@ -12,9 +12,9 @@
 
 namespace
 {
-constexpr const char* kSection = "Luxvelum";
-constexpr const char* kSectionLine = "[Luxvelum]";
-constexpr const char* kIniName = "Luxvelum.ini";
+constexpr const char* kSection = "LuxVelum";
+constexpr const char* kSectionLine = "[LuxVelum]";
+constexpr const char* kIniName = "LuxVelum.ini";
 
 struct EarlierSettings
 {
@@ -477,8 +477,8 @@ bool ConfigStore::ReloadIfChanged()
     m_stamp = stamp;
     LogSettledEdits();
     ReadKeepingStartupSwitches();
-    if (!LogChanges("settings from Luxvelum.ini"))
-        VF_LOG_INFO("Luxvelum.ini reloaded; no live setting changed");
+    if (!LogChanges("settings from LuxVelum.ini"))
+        VF_LOG_INFO("LuxVelum.ini reloaded; no live setting changed");
     return true;
 }
 
@@ -534,7 +534,7 @@ bool ConfigStore::Save()
     m_saved = merged;
     LogSetLevel(merged.logLevel);
     VF_LOG_INFO("settings saved to %s", m_path.c_str());
-    LogChanges("settings from Luxvelum.ini");
+    LogChanges("settings from LuxVelum.ini");
     return true;
 }
 
@@ -543,7 +543,7 @@ void ConfigStore::Revert()
     LogSettledEdits();
     m_stamp = FileStamp(m_path);
     ReadKeepingStartupSwitches();
-    LogChanges("settings reverted to Luxvelum.ini");
+    LogChanges("settings reverted to LuxVelum.ini");
 }
 
 void ConfigStore::ReadKeepingStartupSwitches()
