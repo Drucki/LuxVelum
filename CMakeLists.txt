@@ -160,10 +160,6 @@ target_compile_definitions(LuxVelum PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SE
 target_compile_options(LuxVelum PRIVATE /W4 /wd4100 /arch:SSE2 /fp:fast /GS)
 target_link_libraries(LuxVelum PRIVATE kernel32 user32 imgui)
 
-add_library(version SHARED proxy/version_proxy.cpp proxy/version.def)
-target_link_libraries(version PRIVATE LuxVelum)
-target_compile_definitions(version PRIVATE WIN32_LEAN_AND_MEAN)
-
 add_executable(vfog_harness tests/harness.cpp src/client_code.cpp src/client_light_stay.cpp
                src/client_ripple_sprites.cpp src/config.cpp src/engine_actors.cpp
                src/engine_lights.cpp src/local_light_stabiliser.cpp

@@ -44,7 +44,7 @@ jobs:
         run: |
           $package = 'build/package'
           New-Item -ItemType Directory -Path $package | Out-Null
-          $files = 'version.dll', 'LuxVelum.dll', 'LuxVelum.ini', 'fogdata.bin', 'waterdata.bin'
+          $files = 'LuxVelum.dll', 'LuxVelum.ini', 'fogdata.bin', 'waterdata.bin'
           foreach ($file in $files) {
             Copy-Item -LiteralPath "build/Release/$file" -Destination $package -ErrorAction Stop
           }
@@ -131,8 +131,11 @@ jobs:
             echo "Win32 Release build of \`${BRANCH}\` at ${short}."
             echo
             echo "With the client closed, unzip \`LuxVelum-Win32.zip\` into the client folder next to \`Wow.exe\`,"
-            echo "replacing \`version.dll\`, \`LuxVelum.dll\`, \`LuxVelum.ini\` (the default settings),"
-            echo "\`fogdata.bin\` and \`waterdata.bin\`. To keep your settings from Luxveil or CoAVolFog, leave"
+            echo "replacing \`LuxVelum.dll\`, \`LuxVelum.ini\` (the default settings), \`fogdata.bin\` and"
+            echo "\`waterdata.bin\`. \`Wow.exe\` loads \`LuxVelum.dll\` through the LuxVelum loader of St0ny's AIO WoW"
+            echo "EXE Patcher; the package has no \`version.dll\` any more. Delete the \`version.dll\` of an earlier"
+            echo "package, also one from LuxVelum, or the client does not start."
+            echo "To keep your settings from Luxveil or CoAVolFog, leave"
             echo "out \`LuxVelum.ini\`: an existing \`Luxveil.ini\`, else \`CoAVolFog.ini\`, is then taken over on"
             echo "the first start. The old \`Luxveil.*\` and \`CoAVolFog.*\` DLL, INI and log files are no longer"
             echo "used and can be deleted."
@@ -227,8 +230,11 @@ jobs:
             echo "stays at releases/latest."
             echo
             echo "With the client closed, unzip \`LuxVelum-Win32.zip\` into the client folder next to \`Wow.exe\`,"
-            echo "replacing \`version.dll\`, \`LuxVelum.dll\`, \`LuxVelum.ini\` (the default settings),"
-            echo "\`fogdata.bin\` and \`waterdata.bin\`. To keep your settings from Luxveil or CoAVolFog, leave"
+            echo "replacing \`LuxVelum.dll\`, \`LuxVelum.ini\` (the default settings), \`fogdata.bin\` and"
+            echo "\`waterdata.bin\`. \`Wow.exe\` loads \`LuxVelum.dll\` through the LuxVelum loader of St0ny's AIO WoW"
+            echo "EXE Patcher; the package has no \`version.dll\` any more. Delete the \`version.dll\` of an earlier"
+            echo "package, also one from LuxVelum, or the client does not start."
+            echo "To keep your settings from Luxveil or CoAVolFog, leave"
             echo "out \`LuxVelum.ini\`: an existing \`Luxveil.ini\`, else \`CoAVolFog.ini\`, is then taken over on"
             echo "the first start. The old \`Luxveil.*\` and \`CoAVolFog.*\` DLL, INI and log files are no longer"
             echo "used and can be deleted."

@@ -1,10 +1,10 @@
 # AGENTS.md
 
 LuxVelum ("Atmospheric Immersion for Project Reforged — WoW 3.3.5") is a fork of CoAVolFog, a Win32 Direct3D 9
-volumetric fog and water DLL for the Ascension/CoA WoW 3.3.5a (12340) client. A `version.dll` proxy loads
-`LuxVelum.dll`, which wraps Direct3D 9, retargets a few engine call sites, reshades the client's water after its liquid
-pass and draws the fog after the world. It is built with CMake and MSVC; the shaders are compiled with `fxc`.
-`README.md` holds the design and the reverse-engineering evidence.
+volumetric fog and water DLL for the Ascension/CoA WoW 3.3.5a (12340) client. `Wow.exe`, patched with the LuxVelum
+loader of St0ny's AIO WoW EXE Patcher, loads `LuxVelum.dll`, which wraps Direct3D 9, retargets a few engine call sites,
+reshades the client's water after its liquid pass and draws the fog after the world. It is built with CMake and MSVC;
+the shaders are compiled with `fxc`. `README.md` holds the design and the reverse-engineering evidence.
 
 ## Agent rules
 
@@ -27,13 +27,12 @@ pass and draws the fog after the world. It is built with CMake and MSVC; the sha
   by `tools/convert_forever_water.py` from the WoW Forever water kit (folder or zip) in the same way.
 - Ask before launching the game client. Install only when the owner says the client is closed: check that no process
   runs from the client folder and that the installed `LuxVelum.ini` still matches the repository, then replace
-  `version.dll`, `LuxVelum.dll`, `LuxVelum.ini`, `fogdata.bin` and `waterdata.bin`. After an owner test, read
-  `LuxVelum.log` in the client folder.
+  `LuxVelum.dll`, `LuxVelum.ini`, `fogdata.bin` and `waterdata.bin`. After an owner test, read `LuxVelum.log` in the
+  client folder.
 - Keep plans and results in the conversation. Routine edits need no backups, receipts or standalone reports; use Git.
 
 ## Repository layout
 
-- `proxy/` — the `version.dll` loader that forwards to the system copy.
 - `src/` — `d3d9_wrap` (device wrapper, INTZ depth), `msaa_depth` (multisampled depth copy into INTZ: NVAPI, RESZ,
   self-test), `hooks` (call-site thunks), `engine` (client addresses and frame inputs), `engine_actors` (unit walk
   for water contacts), `engine_lights` (point-light table walk, view-frustum test, ranked candidate pool),
