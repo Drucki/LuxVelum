@@ -31,6 +31,8 @@ struct FrameInputs
     float clientGlowAmount;
     bool inLiquid;
     int mapId;
+    int areaId;
+    int subzoneId;
     LightParamsSelection lightParams;
     LocalLightInputs localLights;
 };

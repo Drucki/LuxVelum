@@ -50,6 +50,8 @@ constexpr uintptr_t kCameraPosition = 0x00CD8F5C;
 constexpr uintptr_t kCameraTarget = 0x00CD8F68;
 constexpr uintptr_t kCameraInLiquid = 0x00CD8794;
 constexpr uintptr_t kCurrentMap = 0x00AB63BC;
+constexpr uintptr_t kCurrentArea = 0x00BD080C;
+constexpr uintptr_t kCurrentSubzone = 0x00BD0810;
 constexpr uintptr_t kWorldFrame = 0x00B7436C;
 constexpr uintptr_t kWorldFrameFarClip = 0xB14;
 
@@ -432,6 +434,30 @@ bool BuildFrameInputsUnsafe(FrameInputs& out, bool withPointLights, const PointL
     out.ambientColor = Read<uint32_t>(kAmbientColor);
     out.inLiquid = CameraInLiquid();
     out.mapId = Read<int32_t>(kCurrentMap);
+    out.areaId = Read<int32_t>(kCurrentArea);
+    out.subzoneId = Read<int32_t>(kCurrentSubzone);
+
+    // Gebietswechsel im Log festhalten
+    static bool haveLoggedLocation = false;
+    static int32_t lastLoggedArea = 0;
+    static int32_t lastLoggedSubzone = 0;
+
+    if (!haveLoggedLocation ||
+        out.areaId != lastLoggedArea ||
+        out.subzoneId != lastLoggedSubzone)
+    {
+        VF_LOG_INFO(
+            "LuxVelum location: mapId=%d areaId=%d subzoneId=%d",
+            out.mapId,
+            out.areaId,
+            out.subzoneId
+        );
+
+        lastLoggedArea = out.areaId;
+        lastLoggedSubzone = out.subzoneId;
+        haveLoggedLocation = true;
+    }
+
     out.lightParams = ReadLightParamsSelection();
     const LocalLightCamera lightCamera = FrameLightCamera(out);
     CaptureLocalLightInputs(lightCamera, withPointLights, upload, out.localLights);
