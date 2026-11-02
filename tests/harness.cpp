@@ -2418,6 +2418,82 @@ void CheckTheDllUsesTheClientFolders()
           "Data\\LuxVelum\\fogdata.bin and Data\\LuxVelum\\waterdata.bin there");
 }
 
+std::wstring FreshZoneDirectory(const std::wstring& outDir, const std::wstring& shippedIni)
+{
+    const std::wstring dir = FreshTakeoverDirectory(outDir, L"zones");
+    const std::wstring zones = dir + L"\\LuxVelumZones";
+    for (const wchar_t* file : {L"\\12.ini", L"\\14.ini"})
+        DeleteFileW((zones + file).c_str());
+    RemoveDirectoryW(zones.c_str());
+    CopyFileW(shippedIni.c_str(), (dir + L"\\LuxVelum.ini").c_str(), FALSE);
+    return dir;
+}
+
+Config ZoneSettings(const std::wstring& ini, unsigned zone)
+{
+    ConfigStore store;
+    store.Load(NarrowPath(ini));
+    store.EnterZone(zone);
+    return store.Get();
+}
+
+void CheckZoneSettings(const std::wstring& outDir, const std::wstring& shippedIni)
+{
+    const std::wstring dir = FreshZoneDirectory(outDir, shippedIni);
+    const std::wstring ini = dir + L"\\LuxVelum.ini";
+    const std::wstring elwynnIni = dir + L"\\LuxVelumZones\\12.ini";
+    ConfigStore store;
+    store.Load(NarrowPath(ini));
+    const Config global = store.Get();
+    Check(store.Zone() == kNoZone && !store.EnterZone(kNoZone) && store.EnterZone(12) && store.Zone() == 12 &&
+              !store.HasZoneSettings() && SameLiveSettings(store.Get(), global),
+          "a zone without its own file uses LuxVelum.ini");
+
+    Config edited = store.Get();
+    edited.density = 2.5f;
+    store.Apply(edited);
+    const bool saved = store.Save();
+    const std::string elwynnText = ReadText(elwynnIni);
+    Check(saved && store.HasZoneSettings() && elwynnText.find("\nDensity=2.5") != std::string::npos &&
+              elwynnText.find("Haze") == std::string::npos && ZoneSettings(ini, kNoZone).density == global.density,
+          "Save in a zone writes only the changed settings to that zone's file and leaves LuxVelum.ini alone");
+
+    Check(store.EnterZone(14) && store.Get().density == global.density && store.EnterZone(12) &&
+              store.Get().density == 2.5f,
+          "entering a zone switches to its settings and back");
+
+    WritePrivateProfileStringW(L"LuxVelum", L"Haze", L"3", ini.c_str());
+    const Config layered = ZoneSettings(ini, 12);
+    Check(layered.density == 2.5f && layered.haze == 3.0f && ZoneSettings(ini, 14).haze == 3.0f,
+          "a zone file overrides only its own keys; the rest follows LuxVelum.ini");
+
+    store.Load(NarrowPath(ini));
+    store.EnterZone(12);
+    edited = store.Get();
+    edited.groundFog = 1.5f;
+    store.Apply(edited);
+    const bool held = !store.EnterZone(14) && store.Zone() == 12 && store.PendingZone() == 14;
+    const bool heldSave = store.Save();
+    Check(held && heldSave && ReadText(elwynnIni).find("\nGroundFog=1.5") != std::string::npos &&
+              ZoneSettings(ini, 14).groundFog == global.groundFog && store.EnterZone(14) && store.Zone() == 14 &&
+              store.PendingZone() == kNoZone,
+          "unsaved edits keep their zone until saved, so they never land in the zone entered meanwhile");
+
+    store.EnterZone(12);
+    edited = store.Get();
+    edited.density = 0.5f;
+    store.Apply(edited);
+    const bool allZones = store.SaveForAllZones();
+    Check(allZones && store.Get().density == 0.5f && ReadText(elwynnIni).find("Density") == std::string::npos &&
+              ZoneSettings(ini, 14).density == 0.5f && ZoneSettings(ini, 12).groundFog == 1.5f,
+          "Save for all zones writes LuxVelum.ini and drops the key from the zone's file");
+
+    Check(store.ForgetZoneSettings() && !store.HasZoneSettings() &&
+              GetFileAttributesW(elwynnIni.c_str()) == INVALID_FILE_ATTRIBUTES &&
+              store.Get().groundFog == global.groundFog && !store.ForgetZoneSettings(),
+          "Use global removes the zone's file and goes back to LuxVelum.ini");
+}
+
 constexpr const char* kVersionDllExports[] = {
     "GetFileVersionInfoA",       "GetFileVersionInfoByHandle", "GetFileVersionInfoExA",
     "GetFileVersionInfoExW",     "GetFileVersionInfoSizeA",    "GetFileVersionInfoSizeExA",
@@ -3187,6 +3263,7 @@ int Run(const std::wstring& outDir, const std::string& dataPath, const std::wstr
     CheckEarlierSettingsAreTakenOverWhateverTheirShape(outDir, FullPath(iniPath));
     CheckClientInstallLayout(outDir, FullPath(iniPath));
     CheckTheDllUsesTheClientFolders();
+    CheckZoneSettings(outDir, FullPath(iniPath));
     CheckTheVersionDllLoader();
     CheckFogDataBounds(outDir, dataPath);
     forever_look_checks::CheckForeverGlow();

@@ -409,6 +409,46 @@ bool AdoptSettings(const std::string& earlierIni, const char* earlierSection, co
     return false;
 }
 
+std::string FolderOf(const std::string& path)
+{
+    const size_t slash = path.find_last_of("\\/");
+    return slash == std::string::npos ? std::string() : path.substr(0, slash + 1);
+}
+
+bool FileExists(const std::string& path)
+{
+    return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+void ReadLiveSettings(const std::string& path, Config& c)
+{
+    ForEachIntSetting([&](const IntSetting& s) { c.*s.value = ReadInt(path, s.key, c.*s.value, s.lo, s.hi); });
+    ForEachFloatSetting([&](const FloatSetting& s) { c.*s.value = ReadFloat(path, s.key, c.*s.value, s.lo, s.hi); });
+    ForEachBoolSetting(
+        [&](const BoolSetting& s) { c.*s.value = ReadInt(path, s.key, c.*s.value ? 1 : 0, 0, 1) != 0; });
+}
+
+std::string ZoneSettingsHeader(unsigned zone)
+{
+    return "; LuxVelum settings for zone " + std::to_string(zone) +
+           " (AreaTable ID). Keys missing here use LuxVelum.ini.\r\n" + kSectionLine + "\r\n";
+}
+
+bool CreateZoneSettings(const std::string& folder, const std::string& path, unsigned zone)
+{
+    if (FileExists(path))
+        return true;
+    CreateDirectoryA(folder.c_str(), nullptr);
+    return WriteWholeFile(path, ZoneSettingsHeader(zone));
+}
+
+bool ClearSetting(const std::string& path, const char* key)
+{
+    if (path.empty() || !FileExists(path))
+        return true;
+    return WritePrivateProfileStringA(kSection, key, nullptr, path.c_str()) != FALSE;
+}
+
 bool IsLetterOrDigitKey(unsigned virtualKey)
 {
     return (virtualKey >= '0' && virtualKey <= '9') || (virtualKey >= 'A' && virtualKey <= 'Z');
@@ -547,9 +587,28 @@ std::string SettingChanges(const Config& before, const Config& after)
 void ConfigStore::Load(const std::string& path)
 {
     m_path = path;
-    m_stamp = FileStamp(path);
+    m_zoneFolder = FolderOf(path) + kZoneSettingsFolder + "\\";
+    m_zone = kNoZone;
+    m_pendingZone = kNoZone;
+    RememberStamps();
     Read();
     m_logged = m_config;
+}
+
+std::string ConfigStore::ZonePath(unsigned zone) const
+{
+    return m_zoneFolder + std::to_string(zone) + ".ini";
+}
+
+bool ConfigStore::HasZoneSettings() const
+{
+    return m_zone != kNoZone && FileExists(ZonePath());
+}
+
+void ConfigStore::RememberStamps()
+{
+    m_stamp = FileStamp(m_path);
+    m_zoneStamp = m_zone == kNoZone ? 0 : FileStamp(ZonePath());
 }
 
 void ConfigStore::Override(const Config& config)
@@ -574,14 +633,41 @@ void ConfigStore::LogSettledEdits()
 
 bool ConfigStore::ReloadIfChanged()
 {
-    unsigned long long stamp = FileStamp(m_path);
-    if (stamp == m_stamp)
+    const unsigned long long stamp = FileStamp(m_path);
+    const unsigned long long zoneStamp = m_zone == kNoZone ? 0 : FileStamp(ZonePath());
+    if (stamp == m_stamp && zoneStamp == m_zoneStamp)
         return false;
     m_stamp = stamp;
+    m_zoneStamp = zoneStamp;
     LogSettledEdits();
     ReadKeepingStartupSwitches();
     if (!LogChanges("settings from LuxVelum.ini"))
         VF_LOG_INFO("LuxVelum.ini reloaded; no live setting changed");
+    return true;
+}
+
+bool ConfigStore::EnterZone(unsigned zone)
+{
+    if (zone == kNoZone || zone == m_zone)
+    {
+        m_pendingZone = kNoZone;
+        return false;
+    }
+    if (HasUnsavedChanges())
+    {
+        if (m_pendingZone != zone)
+            VF_LOG_INFO("zone %u entered; the unsaved settings of zone %u stay until they are saved or reverted", zone,
+                        m_zone);
+        m_pendingZone = zone;
+        return false;
+    }
+    LogSettledEdits();
+    m_zone = zone;
+    m_pendingZone = kNoZone;
+    RememberStamps();
+    ReadKeepingStartupSwitches();
+    VF_LOG_INFO("zone %u: settings from %s", zone, HasZoneSettings() ? ZonePath().c_str() : m_path.c_str());
+    LogChanges("zone settings");
     return true;
 }
 
@@ -600,15 +686,38 @@ void ConfigStore::Apply(const Config& edited)
 
 bool ConfigStore::Save()
 {
+    if (m_zone == kNoZone)
+        return SaveInto(m_path, ReadGlobalFile(), std::string());
+    const std::string zonePath = ZonePath();
+    const Config layered = ReadFile();
+    if (!CreateZoneSettings(m_zoneFolder, zonePath, m_zone))
+    {
+        VF_LOG_ERROR("zone settings could not be created at %s (error %lu)", zonePath.c_str(), GetLastError());
+        return false;
+    }
+    return SaveInto(zonePath, layered, std::string());
+}
+
+bool ConfigStore::SaveForAllZones()
+{
+    return SaveInto(m_path, ReadGlobalFile(), m_zone == kNoZone ? std::string() : ZonePath());
+}
+
+bool ConfigStore::SaveInto(const std::string& target, const Config& targetOnDisk, const std::string& clearedFrom)
+{
     LogSettledEdits();
     const Config onDisk = ReadFile();
     Config merged = m_config;
     bool written = true;
     ForEachIntSetting([&](const IntSetting& s) {
         if (m_config.*s.value == m_saved.*s.value)
+        {
             merged.*s.value = onDisk.*s.value;
-        else if (m_config.*s.value != onDisk.*s.value)
-            written = WriteSetting(m_path, s.key, std::to_string(m_config.*s.value)) && written;
+            return;
+        }
+        if (m_config.*s.value != targetOnDisk.*s.value)
+            written = WriteSetting(target, s.key, std::to_string(m_config.*s.value)) && written;
+        written = ClearSetting(clearedFrom, s.key) && written;
     });
     ForEachFloatSetting([&](const FloatSetting& s) {
         if (m_config.*s.value == m_saved.*s.value)
@@ -618,25 +727,48 @@ bool ConfigStore::Save()
         }
         const std::string text = SettingText(m_config.*s.value);
         merged.*s.value = std::strtof(text.c_str(), nullptr);
-        if (merged.*s.value != onDisk.*s.value)
-            written = WriteSetting(m_path, s.key, text) && written;
+        if (merged.*s.value != targetOnDisk.*s.value)
+            written = WriteSetting(target, s.key, text) && written;
+        written = ClearSetting(clearedFrom, s.key) && written;
     });
     ForEachBoolSetting([&](const BoolSetting& s) {
         if (m_config.*s.value == m_saved.*s.value)
+        {
             merged.*s.value = onDisk.*s.value;
-        else if (m_config.*s.value != onDisk.*s.value)
-            written = WriteSetting(m_path, s.key, m_config.*s.value ? "1" : "0") && written;
+            return;
+        }
+        if (m_config.*s.value != targetOnDisk.*s.value)
+            written = WriteSetting(target, s.key, m_config.*s.value ? "1" : "0") && written;
+        written = ClearSetting(clearedFrom, s.key) && written;
     });
-    m_stamp = FileStamp(m_path);
+    RememberStamps();
     if (!written)
     {
-        VF_LOG_ERROR("settings could not be written to %s (error %lu)", m_path.c_str(), GetLastError());
+        VF_LOG_ERROR("settings could not be written to %s (error %lu)", target.c_str(), GetLastError());
         return false;
     }
     m_config = merged;
     m_saved = merged;
     LogSetLevel(merged.logLevel);
-    VF_LOG_INFO("settings saved to %s", m_path.c_str());
+    VF_LOG_INFO("settings saved to %s", target.c_str());
+    LogChanges("settings from LuxVelum.ini");
+    return true;
+}
+
+bool ConfigStore::ForgetZoneSettings()
+{
+    if (!HasZoneSettings())
+        return false;
+    const std::string zonePath = ZonePath();
+    LogSettledEdits();
+    if (!DeleteFileA(zonePath.c_str()))
+    {
+        VF_LOG_ERROR("zone settings %s could not be removed (error %lu)", zonePath.c_str(), GetLastError());
+        return false;
+    }
+    RememberStamps();
+    ReadKeepingStartupSwitches();
+    VF_LOG_INFO("zone %u settings removed; the zone uses %s", m_zone, m_path.c_str());
     LogChanges("settings from LuxVelum.ini");
     return true;
 }
@@ -644,7 +776,7 @@ bool ConfigStore::Save()
 void ConfigStore::Revert()
 {
     LogSettledEdits();
-    m_stamp = FileStamp(m_path);
+    RememberStamps();
     ReadKeepingStartupSwitches();
     LogChanges("settings reverted to LuxVelum.ini");
 }
@@ -668,7 +800,7 @@ void ConfigStore::Read()
     LogSetLevel(c.logLevel);
 }
 
-Config ConfigStore::ReadFile() const
+Config ConfigStore::ReadGlobalFile() const
 {
     Config c;
     const std::string& p = m_path;
@@ -677,9 +809,17 @@ Config ConfigStore::ReadFile() const
     c.lightStay = ReadInt(p, "LightStay", 1, 0, 1) != 0;
     c.overlay = ReadInt(p, "Overlay", 1, 0, 1) != 0;
     c.overlayKey = ReadHotkey(p, "OverlayKey", c.overlayKey);
-    ForEachIntSetting([&](const IntSetting& s) { c.*s.value = ReadInt(p, s.key, c.*s.value, s.lo, s.hi); });
-    ForEachFloatSetting([&](const FloatSetting& s) { c.*s.value = ReadFloat(p, s.key, c.*s.value, s.lo, s.hi); });
-    ForEachBoolSetting([&](const BoolSetting& s) { c.*s.value = ReadInt(p, s.key, c.*s.value ? 1 : 0, 0, 1) != 0; });
+    ReadLiveSettings(p, c);
+    ClampLiveSettings(c);
+    return c;
+}
+
+Config ConfigStore::ReadFile() const
+{
+    Config c = ReadGlobalFile();
+    if (!HasZoneSettings())
+        return c;
+    ReadLiveSettings(ZonePath(), c);
     ClampLiveSettings(c);
     return c;
 }

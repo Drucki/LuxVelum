@@ -97,28 +97,46 @@ bool SameFogSettings(const Config& a, const Config& b);
 bool SameLiveSettings(const Config& a, const Config& b);
 std::string SettingChanges(const Config& before, const Config& after);
 
+constexpr unsigned kNoZone = 0;
+constexpr const char* kZoneSettingsFolder = "LuxVelumZones";
+
 class ConfigStore
 {
 public:
     void Load(const std::string& path);
     bool ReloadIfChanged();
+    bool EnterZone(unsigned zone);
     void Override(const Config& config);
     void Apply(const Config& edited);
     void LogSettledEdits();
     bool Save();
+    bool SaveForAllZones();
+    bool ForgetZoneSettings();
     void Revert();
     bool HasUnsavedChanges() const { return !SameLiveSettings(m_config, m_saved); }
     const Config& Get() const { return m_config; }
     const std::string& Path() const { return m_path; }
+    unsigned Zone() const { return m_zone; }
+    unsigned PendingZone() const { return m_pendingZone; }
+    bool HasZoneSettings() const;
+    std::string ZonePath() const { return ZonePath(m_zone); }
+    std::string ZonePath(unsigned zone) const;
 
 private:
     void Read();
     Config ReadFile() const;
+    Config ReadGlobalFile() const;
     void ReadKeepingStartupSwitches();
     bool LogChanges(const char* origin);
+    bool SaveInto(const std::string& target, const Config& targetOnDisk, const std::string& clearedFrom);
+    void RememberStamps();
 
     std::string m_path;
+    std::string m_zoneFolder;
     unsigned long long m_stamp = 0;
+    unsigned long long m_zoneStamp = 0;
+    unsigned m_zone = kNoZone;
+    unsigned m_pendingZone = kNoZone;
     Config m_config;
     Config m_saved;
     Config m_logged;

@@ -569,6 +569,7 @@ Gx is the graphics device `[0xC5DF88]`.
 | Camera position / look-at target | `0xCD8F5C`, `0xCD8F68` |
 | Camera focus: the unit the camera follows | `0xCD7778` (stored by `0x780860`), else the camera position |
 | Current map | `0xADFBC4` (read by the far clip setter), else `0xAB63BC` |
+| Current zone, AreaTable ID (0 before the world loads; read only, never patched) | `0xBD080C` |
 | Day fraction | `0xD38B04` |
 | Stock fog groups: colour, start, end (read by the render callbacks) | `0xD38B8C`–`0xD38B94`, `0xD38BA0`–`0xD38BA8` |
 | Zone fog distance (light float band 0) | `0xD38C1C` |
@@ -862,6 +863,19 @@ line; settings not changed in the window keep what the file holds. **Revert** re
 file also replaces unsaved changes. The window shows whether the fog drew in the last frame, or why it did not. It also
 shows whether the game's multisampling is kept, or why it is off (`Multisampling` applies later, see Settings). It can
 be moved and resized, and keeps its place and size for the session.
+
+### Zone settings
+
+Every zone can keep its own settings in `WTF\LuxVelumZones\<zone>.ini` beside `WTF\LuxVelum.ini`, named after the
+zone's AreaTable ID (Elwynn Forest 12, Durotar 14, Dun Morogh 1, Tirisfal Glades 85, Teldrassil 141, Mulgore 215).
+A zone file holds only the keys that differ for that zone; every other key, and `Enable`, `EngineHooks`,
+`LightStay`, `Overlay` and `OverlayKey` always, come from `LuxVelum.ini`. A zone without a file uses
+`LuxVelum.ini` alone. The current zone is read about once a second while the world draws; entering another zone
+switches to its settings. Unsaved edits in the window hold the zone they were made in until they are saved or
+reverted, so they never land in a zone entered meanwhile; the window says so. In a zone, **Save for zone** writes
+the changed settings to the zone's file (creating it), **Save for all zones** writes them to `LuxVelum.ini` and
+drops them from the zone's file, and **Use global** deletes the zone's file. Hand edits of the zone file are
+re-read like those of `LuxVelum.ini`.
 
 While the window is open, clicks and the wheel go to it only while the cursor is over it or a drag started on
 it, and keys only while one of its text fields is active (Ctrl+click on a slider). The hotkey never reaches the

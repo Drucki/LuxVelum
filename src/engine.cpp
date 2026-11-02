@@ -51,6 +51,7 @@ constexpr uintptr_t kProjectionGlobal = 0x00ADF628;
 constexpr uintptr_t kCameraPosition = 0x00CD8F5C;
 constexpr uintptr_t kCameraTarget = 0x00CD8F68;
 constexpr uintptr_t kCameraInLiquid = 0x00CD8794;
+constexpr uintptr_t kCurrentZone = 0x00BD080C;
 constexpr uintptr_t kWorldFrame = 0x00B7436C;
 constexpr uintptr_t kWorldFrameFarClip = 0xB14;
 
@@ -818,6 +819,18 @@ void* GameD3DDevice()
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
         return nullptr;
+    }
+}
+
+unsigned CurrentZone()
+{
+    __try
+    {
+        return Read<uint32_t>(kCurrentZone);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return 0;
     }
 }
 

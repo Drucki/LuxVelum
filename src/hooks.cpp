@@ -426,7 +426,8 @@ void ReloadConfigAfterInterval()
     if (now - g_lastReload > kConfigReloadIntervalMs)
     {
         g_lastReload = now;
-        GlobalConfig().ReloadIfChanged();
+        if (!GlobalConfig().EnterZone(engine::CurrentZone()))
+            GlobalConfig().ReloadIfChanged();
     }
 }
 

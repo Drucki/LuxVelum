@@ -119,6 +119,7 @@ void ChooseCameraFocus();
 int CurrentMapId();
 void* GameD3DDevice();
 bool CameraInLiquid();
+unsigned CurrentZone();
 
 ScreenEffects ReadScreenEffects();
 bool GlowScreenEffectRuns();

@@ -480,24 +480,58 @@ void SettingsPanel::Draw(ConfigStore& store, const FogFrameStatus& fogStatus, co
     ImGui::End();
 }
 
+void SettingsPanel::DrawZoneRow(const ConfigStore& store)
+{
+    if (store.Zone() == kNoZone)
+    {
+        ImGui::TextDisabled("Zone unknown; settings from LuxVelum.ini");
+        return;
+    }
+    if (store.HasZoneSettings())
+        ImGui::Text("Zone %u: own settings in %s\\%u.ini", store.Zone(), kZoneSettingsFolder, store.Zone());
+    else
+        ImGui::Text("Zone %u: settings from LuxVelum.ini", store.Zone());
+    if (store.PendingZone() != kNoZone)
+        ImGui::TextColored(kErrorColour, "Now in zone %u; save or revert to switch to its settings",
+                           store.PendingZone());
+}
+
 void SettingsPanel::DrawSaveRow(ConfigStore& store)
 {
+    DrawZoneRow(store);
     const bool unsaved = store.HasUnsavedChanges();
+    const bool inZone = store.Zone() != kNoZone;
     ImGui::BeginDisabled(!unsaved);
-    if (ImGui::Button("Save"))
+    if (ImGui::Button(inZone ? "Save for zone" : "Save"))
         m_saveFailed = !store.Save();
-    ImGui::SetItemTooltip("Write the changed settings to LuxVelum.ini");
+    ImGui::SetItemTooltip(inZone ? "Write the changed settings to this zone's own file"
+                                 : "Write the changed settings to LuxVelum.ini");
+    if (inZone)
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("Save for all zones"))
+            m_saveFailed = !store.SaveForAllZones();
+        ImGui::SetItemTooltip("Write the changed settings to LuxVelum.ini and drop them from this zone's file");
+    }
     ImGui::SameLine();
     if (ImGui::Button("Revert"))
     {
         store.Revert();
         m_saveFailed = false;
     }
-    ImGui::SetItemTooltip("Go back to the settings in LuxVelum.ini");
+    ImGui::SetItemTooltip("Go back to the saved settings");
     ImGui::EndDisabled();
-    ImGui::SameLine();
+    if (store.HasZoneSettings())
+    {
+        ImGui::SameLine();
+        ImGui::BeginDisabled(unsaved);
+        if (ImGui::Button("Use global"))
+            m_saveFailed = !store.ForgetZoneSettings();
+        ImGui::SetItemTooltip("Delete this zone's own file so the zone uses LuxVelum.ini again");
+        ImGui::EndDisabled();
+    }
     if (m_saveFailed)
-        ImGui::TextColored(kErrorColour, "Could not write LuxVelum.ini");
+        ImGui::TextColored(kErrorColour, "Could not write the settings file");
     else
-        ImGui::TextDisabled("%s", unsaved ? "Unsaved changes" : "Matches LuxVelum.ini");
+        ImGui::TextDisabled("%s", unsaved ? "Unsaved changes" : "Matches the saved settings");
 }
