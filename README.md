@@ -877,6 +877,20 @@ the changed settings to the zone's file (creating it), **Save for all zones** wr
 drops them from the zone's file, and **Use global** deletes the zone's file. Hand edits of the zone file are
 re-read like those of `LuxVelum.ini`.
 
+### Day and night settings
+
+The `[LuxVelumNight]` section of `LuxVelum.ini` and of a zone's file holds night values for any live setting; keys
+missing there keep their day value. The game time is read every frame from the day fraction (`0xD38B04`, 0 =
+midnight), so a server that speeds the clock up, such as AzerothCore's time-acceleration modules, speeds the night
+up with it. `NightStart` and `NightEnd` (hours, default 21 and 6) mark the night; over `NightFade` hours (default
+1, 0 = switch at once) centred on each, every float setting blends linearly between its day and night value, while
+whole-number and on/off settings and `FarClipMax` switch at the midpoint. At night the order is: `LuxVelum.ini`,
+the zone's file, the night section of `LuxVelum.ini`, the night section of the zone's file; a later one wins. The
+fog keeps its temporal history while settings blend, as it does while the light changes over the day, and drops it
+for an edit. The window shows the game time and night weight; **Auto** follows the game time, **Day** and **Night**
+show and edit that phase whatever the time. Edits and the save buttons apply to the phase shown; unsaved edits keep
+their phase until they are saved or reverted, like a zone.
+
 While the window is open, clicks and the wheel go to it only while the cursor is over it or a drag started on
 it, and keys only while one of its text fields is active (Ctrl+click on a slider). The hotkey never reaches the
 client; mouse moves and key-ups always do, so no game key sticks. The window is drawn in the wrapper's
@@ -1076,6 +1090,7 @@ its comments describe every key. In the game, `Ctrl+F7` opens the same settings 
 | `LightStay` | 1 | Keep point lights on while their model is not drawn, exe patch No. 70 in memory (restart, hooks) |
 | `Overlay` | 1 | In-game settings window; 0 hides it at once, and from the next start leaves the game window alone |
 | `OverlayKey` | Ctrl+F7 | Key that shows and hides the window, with optional `Ctrl+`, `Shift+`, `Alt+` |
+| `NightStart`, `NightEnd`, `NightFade` | 21, 6, 1 | Night in game hours and its blend; `[LuxVelumNight]` holds the night values |
 | `Quality` | 2 | 1 quarter resolution / 16 steps, 2 half / 24, 3 half / 32 |
 | `Density`, `Haze`, `GroundFog`, `FarFog` | 1, 1, 0.6, 1 | Density multipliers; with Classic data `Haze`, `FarFog` and `GroundFog` relative to their defaults scale layers 0, 1 and 2 (haze, far wall, ground fog) |
 | `NoiseAmount` | 0.15 | World-space density variation, 0..1; 0 disables it |

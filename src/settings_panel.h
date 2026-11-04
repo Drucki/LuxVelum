@@ -25,6 +25,7 @@ private:
     void RememberPlacement();
     bool DrawSettings(Config& edited, const FogFrameStatus& fogStatus);
     void DrawFooter(ConfigStore& store, const WaterFrameStatus& waterStatus, const MultisamplingStatus& multisampling);
+    void DrawDayRow(ConfigStore& store);
     void DrawZoneRow(const ConfigStore& store);
     void DrawSaveRow(ConfigStore& store);
 

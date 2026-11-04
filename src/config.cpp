@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -213,10 +214,11 @@ float ClampedSetting(float v, float lo, float hi)
     return v >= lo ? std::min(v, hi) : lo;
 }
 
-float ReadFloat(const std::string& path, const char* key, float fallback, float lo, float hi)
+float ReadFloat(const std::string& path, const char* key, float fallback, float lo, float hi,
+                const char* section = kSection)
 {
     char buf[64];
-    GetPrivateProfileStringA(kSection, key, "", buf, sizeof(buf), path.c_str());
+    GetPrivateProfileStringA(section, key, "", buf, sizeof(buf), path.c_str());
     if (!buf[0])
         return fallback;
     char* end = nullptr;
@@ -226,9 +228,9 @@ float ReadFloat(const std::string& path, const char* key, float fallback, float 
     return std::clamp(v, lo, hi);
 }
 
-int ReadInt(const std::string& path, const char* key, int fallback, int lo, int hi)
+int ReadInt(const std::string& path, const char* key, int fallback, int lo, int hi, const char* section = kSection)
 {
-    int v = static_cast<int>(GetPrivateProfileIntA(kSection, key, fallback, path.c_str()));
+    int v = static_cast<int>(GetPrivateProfileIntA(section, key, fallback, path.c_str()));
     return std::clamp(v, lo, hi);
 }
 
@@ -253,9 +255,9 @@ std::string SettingText(float value)
     return text;
 }
 
-bool WriteSetting(const std::string& path, const char* key, const std::string& text)
+bool WriteSetting(const std::string& path, const char* section, const char* key, const std::string& text)
 {
-    return WritePrivateProfileStringA(kSection, key, text.c_str(), path.c_str()) != FALSE;
+    return WritePrivateProfileStringA(section, key, text.c_str(), path.c_str()) != FALSE;
 }
 
 void ClampLiveSettings(Config& c)
@@ -420,12 +422,61 @@ bool FileExists(const std::string& path)
     return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
-void ReadLiveSettings(const std::string& path, Config& c)
+void ReadLiveSettings(const std::string& path, const char* section, Config& c)
 {
-    ForEachIntSetting([&](const IntSetting& s) { c.*s.value = ReadInt(path, s.key, c.*s.value, s.lo, s.hi); });
-    ForEachFloatSetting([&](const FloatSetting& s) { c.*s.value = ReadFloat(path, s.key, c.*s.value, s.lo, s.hi); });
+    ForEachIntSetting(
+        [&](const IntSetting& s) { c.*s.value = ReadInt(path, s.key, c.*s.value, s.lo, s.hi, section); });
+    ForEachFloatSetting(
+        [&](const FloatSetting& s) { c.*s.value = ReadFloat(path, s.key, c.*s.value, s.lo, s.hi, section); });
     ForEachBoolSetting(
-        [&](const BoolSetting& s) { c.*s.value = ReadInt(path, s.key, c.*s.value ? 1 : 0, 0, 1) != 0; });
+        [&](const BoolSetting& s) { c.*s.value = ReadInt(path, s.key, c.*s.value ? 1 : 0, 0, 1, section) != 0; });
+}
+
+constexpr float kHoursPerDay = 24.0f;
+constexpr float kMaxNightFade = 6.0f;
+constexpr float kNightWeightStep = 1.0f / 512.0f;
+
+const char* SectionOf(DayPhase phase)
+{
+    return phase == DayPhase::Night ? kNightSection : kSection;
+}
+
+const char* PhaseName(DayPhase phase)
+{
+    return phase == DayPhase::Night ? "night" : "day";
+}
+
+DayPhase OtherPhase(DayPhase phase)
+{
+    return phase == DayPhase::Night ? DayPhase::Day : DayPhase::Night;
+}
+
+void KeepStartupSwitches(const Config& from, Config& to)
+{
+    to.enable = from.enable;
+    to.hooks = from.hooks;
+    to.lightStay = from.lightStay;
+}
+
+void KeepGlobalOnlySettings(const Config& from, Config& to)
+{
+    KeepStartupSwitches(from, to);
+    to.overlay = from.overlay;
+    to.overlayKey = from.overlayKey;
+    to.nightStart = from.nightStart;
+    to.nightEnd = from.nightEnd;
+    to.nightFade = from.nightFade;
+}
+
+float HoursAfter(float hour, float from)
+{
+    return std::fmod(std::fmod(hour - from, kHoursPerDay) + kHoursPerDay, kHoursPerDay);
+}
+
+float SmoothStep(float t)
+{
+    t = std::clamp(t, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
 }
 
 std::string ZoneSettingsHeader(unsigned zone)
@@ -442,11 +493,11 @@ bool CreateZoneSettings(const std::string& folder, const std::string& path, unsi
     return WriteWholeFile(path, ZoneSettingsHeader(zone));
 }
 
-bool ClearSetting(const std::string& path, const char* key)
+bool ClearSetting(const std::string& path, const char* section, const char* key)
 {
     if (path.empty() || !FileExists(path))
         return true;
-    return WritePrivateProfileStringA(kSection, key, nullptr, path.c_str()) != FALSE;
+    return WritePrivateProfileStringA(section, key, nullptr, path.c_str()) != FALSE;
 }
 
 bool IsLetterOrDigitKey(unsigned virtualKey)
@@ -584,12 +635,52 @@ std::string SettingChanges(const Config& before, const Config& after)
     return changes;
 }
 
+bool SameFogHistorySettings(const Config& a, const Config& b)
+{
+    if (SameFogSettings(a, b))
+        return true;
+    return a.settingsRevision == b.settingsRevision && SameValues(kIntSettings, a, b) &&
+           SameValues(kBoolSettings, a, b);
+}
+
+float NightWeight(float hour, float nightStart, float nightEnd, float fade)
+{
+    const float night = HoursAfter(nightEnd, nightStart);
+    if (night <= 0.0f)
+        return 0.0f;
+    const float ramp = std::clamp(fade, 0.0f, std::min(night, kHoursPerDay - night));
+    const float sinceFadeIn = HoursAfter(hour, nightStart - ramp * 0.5f);
+    if (ramp <= 0.0f)
+        return sinceFadeIn < night ? 1.0f : 0.0f;
+    const float span = night + ramp;
+    if (sinceFadeIn >= span)
+        return 0.0f;
+    return SmoothStep(std::min(sinceFadeIn, span - sinceFadeIn) / ramp);
+}
+
+Config BlendDayAndNight(const Config& day, const Config& night, float nightWeight)
+{
+    const float w = std::clamp(nightWeight, 0.0f, 1.0f);
+    Config c = w >= 0.5f ? night : day;
+    ForEachFloatSetting([&](const FloatSetting& s) {
+        if (s.value != &Config::farClipMax)
+            c.*s.value = day.*s.value + (night.*s.value - day.*s.value) * w;
+    });
+    KeepGlobalOnlySettings(day, c);
+    return c;
+}
+
 void ConfigStore::Load(const std::string& path)
 {
     m_path = path;
     m_zoneFolder = FolderOf(path) + kZoneSettingsFolder + "\\";
     m_zone = kNoZone;
     m_pendingZone = kNoZone;
+    m_phase = DayPhase::Day;
+    m_pendingPhase = DayPhase::Day;
+    m_choice = PhaseChoice::Auto;
+    m_nightWeight = 0.0f;
+    m_gameHour = -1.0f;
     RememberStamps();
     Read();
     m_logged = m_config;
@@ -611,10 +702,28 @@ void ConfigStore::RememberStamps()
     m_zoneStamp = m_zone == kNoZone ? 0 : FileStamp(ZonePath());
 }
 
+void ConfigStore::RefreshEffective()
+{
+    if (HasUnsavedChanges() || m_choice != PhaseChoice::Auto)
+    {
+        m_effective = m_config;
+    }
+    else
+    {
+        const bool night = m_phase == DayPhase::Night;
+        Config day = night ? m_other : m_config;
+        KeepGlobalOnlySettings(m_config, day);
+        m_effective = BlendDayAndNight(day, night ? m_config : m_other, m_nightWeight);
+    }
+    m_effective.settingsRevision = m_revision;
+}
+
 void ConfigStore::Override(const Config& config)
 {
     m_config = config;
     m_logged = config;
+    m_effective = config;
+    m_effective.settingsRevision = ++m_revision;
 }
 
 bool ConfigStore::LogChanges(const char* origin)
@@ -671,75 +780,112 @@ bool ConfigStore::EnterZone(unsigned zone)
     return true;
 }
 
+bool ConfigStore::FollowPhase(DayPhase wanted)
+{
+    if (m_choice == PhaseChoice::Day)
+        wanted = DayPhase::Day;
+    else if (m_choice == PhaseChoice::Night)
+        wanted = DayPhase::Night;
+    if (wanted == m_phase)
+    {
+        m_pendingPhase = m_phase;
+        return false;
+    }
+    if (HasUnsavedChanges())
+    {
+        if (m_pendingPhase != wanted)
+            VF_LOG_INFO("%s began; the unsaved %s settings stay until they are saved or reverted", PhaseName(wanted),
+                        PhaseName(m_phase));
+        m_pendingPhase = wanted;
+        return false;
+    }
+    SwitchPhase(wanted);
+    return true;
+}
+
+void ConfigStore::SwitchPhase(DayPhase phase)
+{
+    LogSettledEdits();
+    Config next = m_other;
+    KeepStartupSwitches(m_config, next);
+    m_other = m_saved;
+    m_saved = next;
+    m_config = next;
+    m_phase = phase;
+    m_pendingPhase = phase;
+    LogChanges(phase == DayPhase::Night ? "night settings" : "day settings");
+}
+
+void ConfigStore::SetDayFraction(float dayFraction)
+{
+    if (!std::isfinite(dayFraction) || dayFraction < 0.0f)
+        return;
+    m_gameHour = std::fmod(dayFraction, 1.0f) * kHoursPerDay;
+    const float weight = NightWeight(m_gameHour, m_config.nightStart, m_config.nightEnd, m_config.nightFade);
+    const bool switched = FollowPhase(weight >= 0.5f ? DayPhase::Night : DayPhase::Day);
+    const bool settled = (weight == 0.0f || weight == 1.0f) && weight != m_nightWeight;
+    if (!switched && !settled && std::fabs(weight - m_nightWeight) < kNightWeightStep)
+        return;
+    m_nightWeight = weight;
+    RefreshEffective();
+}
+
+void ConfigStore::ChoosePhase(PhaseChoice choice)
+{
+    m_choice = choice;
+    FollowPhase(m_nightWeight >= 0.5f ? DayPhase::Night : DayPhase::Day);
+    RefreshEffective();
+}
+
 void ConfigStore::Apply(const Config& edited)
 {
     Config c = edited;
-    c.enable = m_config.enable;
-    c.hooks = m_config.hooks;
-    c.lightStay = m_config.lightStay;
-    c.overlay = m_config.overlay;
-    c.overlayKey = m_config.overlayKey;
+    KeepGlobalOnlySettings(m_config, c);
     ClampLiveSettings(c);
     m_config = c;
+    ++m_revision;
     LogSetLevel(c.logLevel);
+    RefreshEffective();
 }
 
 bool ConfigStore::Save()
 {
     if (m_zone == kNoZone)
-        return SaveInto(m_path, ReadGlobalFile(), std::string());
+        return SaveInto(m_path, std::string());
     const std::string zonePath = ZonePath();
-    const Config layered = ReadFile();
     if (!CreateZoneSettings(m_zoneFolder, zonePath, m_zone))
     {
         VF_LOG_ERROR("zone settings could not be created at %s (error %lu)", zonePath.c_str(), GetLastError());
         return false;
     }
-    return SaveInto(zonePath, layered, std::string());
+    return SaveInto(zonePath, std::string());
 }
 
 bool ConfigStore::SaveForAllZones()
 {
-    return SaveInto(m_path, ReadGlobalFile(), m_zone == kNoZone ? std::string() : ZonePath());
+    return SaveInto(m_path, m_zone == kNoZone ? std::string() : ZonePath());
 }
 
-bool ConfigStore::SaveInto(const std::string& target, const Config& targetOnDisk, const std::string& clearedFrom)
+bool ConfigStore::SaveInto(const std::string& target, const std::string& clearedFrom)
 {
     LogSettledEdits();
-    const Config onDisk = ReadFile();
-    Config merged = m_config;
+    const char* section = SectionOf(m_phase);
     bool written = true;
+    auto save = [&](const char* key, const std::string& text) {
+        written = WriteSetting(target, section, key, text) && written;
+        written = ClearSetting(clearedFrom, section, key) && written;
+    };
     ForEachIntSetting([&](const IntSetting& s) {
-        if (m_config.*s.value == m_saved.*s.value)
-        {
-            merged.*s.value = onDisk.*s.value;
-            return;
-        }
-        if (m_config.*s.value != targetOnDisk.*s.value)
-            written = WriteSetting(target, s.key, std::to_string(m_config.*s.value)) && written;
-        written = ClearSetting(clearedFrom, s.key) && written;
+        if (m_config.*s.value != m_saved.*s.value)
+            save(s.key, std::to_string(m_config.*s.value));
     });
     ForEachFloatSetting([&](const FloatSetting& s) {
-        if (m_config.*s.value == m_saved.*s.value)
-        {
-            merged.*s.value = onDisk.*s.value;
-            return;
-        }
-        const std::string text = SettingText(m_config.*s.value);
-        merged.*s.value = std::strtof(text.c_str(), nullptr);
-        if (merged.*s.value != targetOnDisk.*s.value)
-            written = WriteSetting(target, s.key, text) && written;
-        written = ClearSetting(clearedFrom, s.key) && written;
+        if (m_config.*s.value != m_saved.*s.value)
+            save(s.key, SettingText(m_config.*s.value));
     });
     ForEachBoolSetting([&](const BoolSetting& s) {
-        if (m_config.*s.value == m_saved.*s.value)
-        {
-            merged.*s.value = onDisk.*s.value;
-            return;
-        }
-        if (m_config.*s.value != targetOnDisk.*s.value)
-            written = WriteSetting(target, s.key, m_config.*s.value ? "1" : "0") && written;
-        written = ClearSetting(clearedFrom, s.key) && written;
+        if (m_config.*s.value != m_saved.*s.value)
+            save(s.key, m_config.*s.value ? "1" : "0");
     });
     RememberStamps();
     if (!written)
@@ -747,10 +893,8 @@ bool ConfigStore::SaveInto(const std::string& target, const Config& targetOnDisk
         VF_LOG_ERROR("settings could not be written to %s (error %lu)", target.c_str(), GetLastError());
         return false;
     }
-    m_config = merged;
-    m_saved = merged;
-    LogSetLevel(merged.logLevel);
-    VF_LOG_INFO("settings saved to %s", target.c_str());
+    ReadKeepingStartupSwitches();
+    VF_LOG_INFO("%s settings saved to %s", PhaseName(m_phase), target.c_str());
     LogChanges("settings from LuxVelum.ini");
     return true;
 }
@@ -783,24 +927,25 @@ void ConfigStore::Revert()
 
 void ConfigStore::ReadKeepingStartupSwitches()
 {
-    bool enable = m_config.enable;
-    bool hooks = m_config.hooks;
-    bool lightStay = m_config.lightStay;
+    const Config before = m_config;
     Read();
-    m_config.enable = enable;
-    m_config.hooks = hooks;
-    m_config.lightStay = lightStay;
+    KeepStartupSwitches(before, m_config);
+    KeepStartupSwitches(before, m_saved);
+    RefreshEffective();
 }
 
 void ConfigStore::Read()
 {
-    const Config c = ReadFile();
-    m_config = c;
-    m_saved = c;
-    LogSetLevel(c.logLevel);
+    const Config phase = ReadFile(m_phase);
+    m_config = phase;
+    m_saved = phase;
+    m_other = ReadFile(OtherPhase(m_phase));
+    ++m_revision;
+    LogSetLevel(phase.logLevel);
+    RefreshEffective();
 }
 
-Config ConfigStore::ReadGlobalFile() const
+Config ConfigStore::ReadFile(DayPhase phase) const
 {
     Config c;
     const std::string& p = m_path;
@@ -809,17 +954,19 @@ Config ConfigStore::ReadGlobalFile() const
     c.lightStay = ReadInt(p, "LightStay", 1, 0, 1) != 0;
     c.overlay = ReadInt(p, "Overlay", 1, 0, 1) != 0;
     c.overlayKey = ReadHotkey(p, "OverlayKey", c.overlayKey);
-    ReadLiveSettings(p, c);
-    ClampLiveSettings(c);
-    return c;
-}
-
-Config ConfigStore::ReadFile() const
-{
-    Config c = ReadGlobalFile();
-    if (!HasZoneSettings())
-        return c;
-    ReadLiveSettings(ZonePath(), c);
+    c.nightStart = ReadFloat(p, "NightStart", kDefaultNightStart, 0.0f, kHoursPerDay);
+    c.nightEnd = ReadFloat(p, "NightEnd", kDefaultNightEnd, 0.0f, kHoursPerDay);
+    c.nightFade = ReadFloat(p, "NightFade", kDefaultNightFade, 0.0f, kMaxNightFade);
+    const bool zone = HasZoneSettings();
+    ReadLiveSettings(p, kSection, c);
+    if (zone)
+        ReadLiveSettings(ZonePath(), kSection, c);
+    if (phase == DayPhase::Night)
+    {
+        ReadLiveSettings(p, kNightSection, c);
+        if (zone)
+            ReadLiveSettings(ZonePath(), kNightSection, c);
+    }
     ClampLiveSettings(c);
     return c;
 }

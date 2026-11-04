@@ -422,6 +422,7 @@ void OnFrameEnd()
 
 void ReloadConfigAfterInterval()
 {
+    GlobalConfig().SetDayFraction(engine::GameDayFraction());
     DWORD now = GetTickCount();
     if (now - g_lastReload > kConfigReloadIntervalMs)
     {

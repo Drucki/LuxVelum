@@ -1524,7 +1524,7 @@ bool Renderer::RenderPasses(IDirect3DDevice9* dev, const SceneDepth& depth, IDir
     const float forwardDot = worldToView[2] * m_prevWorldToView[2] +
                              worldToView[6] * m_prevWorldToView[6] + worldToView[10] * m_prevWorldToView[10];
     const bool historyValid = m_historyValid && cfg.temporal > 0.0f && m_prevScale == scale &&
-                              SameFogSettings(cfg, m_prevConfig) && in.mapId == m_prevMap &&
+                              SameFogHistorySettings(cfg, m_prevConfig) && in.mapId == m_prevMap &&
                               in.lightParams.screenEffectSlot == m_prevLightSlot &&
                               forwardDot > kHistoryMinForwardDot &&
                               std::memcmp(m_prevProj, proj, sizeof(m_prevProj)) == 0 &&

@@ -2494,6 +2494,91 @@ void CheckZoneSettings(const std::wstring& outDir, const std::wstring& shippedIn
           "Use global removes the zone's file and goes back to LuxVelum.ini");
 }
 
+constexpr float kNoonDayFraction = 0.5f;
+constexpr float kOneAmDayFraction = 1.0f / 24.0f;
+constexpr float kNinePmDayFraction = 21.0f / 24.0f;
+
+void CheckNightWeights()
+{
+    Check(NightWeight(12.0f, 21.0f, 6.0f, 1.0f) == 0.0f && NightWeight(1.0f, 21.0f, 6.0f, 1.0f) == 1.0f &&
+              NightWeight(21.0f, 21.0f, 6.0f, 1.0f) == 0.5f && NightWeight(6.0f, 21.0f, 6.0f, 1.0f) == 0.5f &&
+              NightWeight(20.5f, 21.0f, 6.0f, 1.0f) == 0.0f && NightWeight(21.5f, 21.0f, 6.0f, 1.0f) == 1.0f,
+          "the night weight is 0 by day, 1 at night and 0.5 at NightStart and NightEnd, fading over NightFade");
+    Check(NightWeight(20.99f, 21.0f, 6.0f, 0.0f) == 0.0f && NightWeight(21.0f, 21.0f, 6.0f, 0.0f) == 1.0f &&
+              NightWeight(3.0f, 6.0f, 6.0f, 1.0f) == 0.0f && NightWeight(3.0f, 1.0f, 5.0f, 1.0f) == 1.0f,
+          "NightFade 0 switches at once, NightStart equal to NightEnd means no night, and a night after midnight "
+          "works");
+}
+
+void CheckDayNightSettings(const std::wstring& outDir, const std::wstring& shippedIni)
+{
+    CheckNightWeights();
+    const std::wstring dir = FreshZoneDirectory(outDir, shippedIni);
+    const std::wstring ini = dir + L"\\LuxVelum.ini";
+    WritePrivateProfileStringW(L"LuxVelumNight", L"Density", L"0.25", ini.c_str());
+    ConfigStore store;
+    store.Load(NarrowPath(ini));
+    const Config day = store.Get();
+    store.SetDayFraction(kNoonDayFraction);
+    const bool dayAtNoon = store.Phase() == DayPhase::Day && store.Get().density == day.density;
+    store.SetDayFraction(kOneAmDayFraction);
+    const Config night = store.Get();
+    Check(dayAtNoon && store.Phase() == DayPhase::Night && store.NightWeightNow() == 1.0f &&
+              night.density == 0.25f && night.haze == day.haze,
+          "at night the LuxVelumNight section replaces only its own keys of the day settings");
+
+    store.SetDayFraction(kNinePmDayFraction);
+    const float blended = store.Get().density;
+    Check(store.NightWeightNow() == 0.5f && std::fabs(blended - (day.density + 0.25f) * 0.5f) < 1e-5f,
+          "around NightStart the day and night values blend by the night weight");
+    Config later = store.Get();
+    later.density = day.density + (0.25f - day.density) * 0.6f;
+    Config edited = store.Get();
+    edited.density = 3.0f;
+    edited.settingsRevision = store.Get().settingsRevision + 1;
+    Check(SameFogHistorySettings(store.Get(), later) && !SameFogHistorySettings(store.Get(), edited),
+          "the fog keeps its history while the day and night values blend, and drops it for an edit");
+
+    const std::wstring zones = dir + L"\\LuxVelumZones";
+    CreateDirectoryW(zones.c_str(), nullptr);
+    const std::wstring elwynnIni = zones + L"\\12.ini";
+    WritePrivateProfileStringW(L"LuxVelum", L"Density", L"2", elwynnIni.c_str());
+    store.SetDayFraction(kOneAmDayFraction);
+    store.EnterZone(12);
+    const float globalNightOverZoneDay = store.Get().density;
+    WritePrivateProfileStringW(L"LuxVelumNight", L"Density", L"0.75", elwynnIni.c_str());
+    store.EnterZone(14);
+    store.EnterZone(12);
+    const float zoneNight = store.Get().density;
+    store.SetDayFraction(kNoonDayFraction);
+    Check(globalNightOverZoneDay == 0.25f && zoneNight == 0.75f && store.Get().density == 2.0f,
+          "a zone's night section wins at night, then the global night section, then the zone's day settings");
+
+    store.EnterZone(14);
+    store.SetDayFraction(kOneAmDayFraction);
+    Config nightEdit = store.Edited();
+    nightEdit.groundFog = 1.25f;
+    store.Apply(nightEdit);
+    store.SetDayFraction(kNoonDayFraction);
+    const bool held = store.Phase() == DayPhase::Night && store.PhasePending() && store.Get().groundFog == 1.25f;
+    const bool saved = store.SaveForAllZones();
+    wchar_t text[32] = {};
+    GetPrivateProfileStringW(L"LuxVelumNight", L"GroundFog", L"", text, 32, ini.c_str());
+    const std::wstring nightGroundFog = text;
+    GetPrivateProfileStringW(L"LuxVelum", L"GroundFog", L"", text, 32, ini.c_str());
+    const std::wstring dayGroundFog = text;
+    store.SetDayFraction(kNoonDayFraction);
+    Check(held && saved && nightGroundFog == L"1.25" && dayGroundFog != L"1.25" && store.Phase() == DayPhase::Day &&
+              store.Get().groundFog == day.groundFog,
+          "unsaved night edits hold the night until saved, saving writes them to LuxVelumNight, then day returns");
+
+    store.ChoosePhase(PhaseChoice::Night);
+    const bool shownNight = store.Phase() == DayPhase::Night && store.Get().groundFog == 1.25f;
+    store.ChoosePhase(PhaseChoice::Auto);
+    Check(shownNight && store.Phase() == DayPhase::Day && store.Get().groundFog == day.groundFog,
+          "choosing Night shows and edits the night settings by day, and Auto follows the game time again");
+}
+
 constexpr const char* kVersionDllExports[] = {
     "GetFileVersionInfoA",       "GetFileVersionInfoByHandle", "GetFileVersionInfoExA",
     "GetFileVersionInfoExW",     "GetFileVersionInfoSizeA",    "GetFileVersionInfoSizeExA",
@@ -3264,6 +3349,7 @@ int Run(const std::wstring& outDir, const std::string& dataPath, const std::wstr
     CheckClientInstallLayout(outDir, FullPath(iniPath));
     CheckTheDllUsesTheClientFolders();
     CheckZoneSettings(outDir, FullPath(iniPath));
+    CheckDayNightSettings(outDir, FullPath(iniPath));
     CheckTheVersionDllLoader();
     CheckFogDataBounds(outDir, dataPath);
     forever_look_checks::CheckForeverGlow();

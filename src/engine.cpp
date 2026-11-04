@@ -822,6 +822,20 @@ void* GameD3DDevice()
     }
 }
 
+float GameDayFraction()
+{
+    if (!IsSupportedClient())
+        return -1.0f;
+    __try
+    {
+        return Read<float>(kDayFraction);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return -1.0f;
+    }
+}
+
 unsigned CurrentZone()
 {
     __try

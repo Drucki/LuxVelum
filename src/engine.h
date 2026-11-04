@@ -120,6 +120,7 @@ int CurrentMapId();
 void* GameD3DDevice();
 bool CameraInLiquid();
 unsigned CurrentZone();
+float GameDayFraction();
 
 ScreenEffects ReadScreenEffects();
 bool GlowScreenEffectRuns();

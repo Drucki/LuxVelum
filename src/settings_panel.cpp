@@ -470,7 +470,7 @@ void SettingsPanel::Draw(ConfigStore& store, const FogFrameStatus& fogStatus, co
     }
     RememberPlacement();
     ImGui::PushTextWrapPos(0.0f);
-    Config edited = store.Get();
+    Config edited = store.Edited();
     if (DrawSettings(edited, fogStatus))
         store.Apply(edited);
     if (!ImGui::IsAnyItemActive())
@@ -496,8 +496,43 @@ void SettingsPanel::DrawZoneRow(const ConfigStore& store)
                            store.PendingZone());
 }
 
+void SettingsPanel::DrawDayRow(ConfigStore& store)
+{
+    const float hour = store.GameHour();
+    if (hour >= 0.0f)
+    {
+        const int minutes = static_cast<int>(hour * 60.0f);
+        ImGui::Text("Game time %02d:%02d, night %d%%", minutes / 60, minutes % 60,
+                    static_cast<int>(store.NightWeightNow() * 100.0f + 0.5f));
+    }
+    else
+    {
+        ImGui::TextDisabled("Game time unknown");
+    }
+    int choice = static_cast<int>(store.ChosenPhase());
+    bool chosen = false;
+    ImGui::BeginDisabled(store.HasUnsavedChanges());
+    chosen |= ImGui::RadioButton("Auto", &choice, static_cast<int>(PhaseChoice::Auto));
+    ImGui::SetItemTooltip("Blend the day and night settings by the game time (NightStart, NightEnd, NightFade)");
+    ImGui::SameLine();
+    chosen |= ImGui::RadioButton("Day", &choice, static_cast<int>(PhaseChoice::Day));
+    ImGui::SetItemTooltip("Show and edit the day settings whatever the game time");
+    ImGui::SameLine();
+    chosen |= ImGui::RadioButton("Night", &choice, static_cast<int>(PhaseChoice::Night));
+    ImGui::SetItemTooltip("Show and edit the night settings whatever the game time");
+    ImGui::EndDisabled();
+    if (chosen)
+        store.ChoosePhase(static_cast<PhaseChoice>(choice));
+    const bool night = store.Phase() == DayPhase::Night;
+    ImGui::TextDisabled("Editing the %s settings", night ? "night" : "day");
+    if (store.PhasePending())
+        ImGui::TextColored(kErrorColour, "It is %s now; save or revert to switch to its settings",
+                           night ? "day" : "night");
+}
+
 void SettingsPanel::DrawSaveRow(ConfigStore& store)
 {
+    DrawDayRow(store);
     DrawZoneRow(store);
     const bool unsaved = store.HasUnsavedChanges();
     const bool inZone = store.Zone() != kNoZone;
